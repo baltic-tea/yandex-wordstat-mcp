@@ -51,6 +51,11 @@ Windows PowerShell:
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
+
+// base installation
+pip install .
+
+// for development
 pip install -e .
 ```
 
