@@ -110,6 +110,18 @@ def test_get_dynamics_request_preserves_inverted_date_range() -> None:
     assert request.to_payload()["toDate"] == "2026-01-01T00:00:00Z"
 
 
+def test_request_models_keep_raw_api_aliases() -> None:
+    top_request = GetTopRequest(phrase="python", numPhrases=10)
+    dynamics_request = GetDynamicsRequest(
+        phrase="python",
+        fromDate="2026-01-01T00:00:00Z",
+        toDate="2026-01-31T00:00:00Z",
+    )
+
+    assert top_request.num_phrases == 10
+    assert dynamics_request.from_date.isoformat().startswith("2026-01-01")
+
+
 def test_get_regions_distribution_request_payload() -> None:
     request = GetRegionsDistributionRequest(
         phrase="python",

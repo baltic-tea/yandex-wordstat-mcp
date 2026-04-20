@@ -7,11 +7,6 @@ import aiohttp
 import pytest
 
 from wordstat_mcp.exceptions import RetriableError, WordstatError
-from wordstat_mcp.models import (
-    GetDynamicsRequest,
-    GetRegionsDistributionRequest,
-    GetTopRequest,
-)
 from wordstat_mcp.tools import WordstatClient
 
 from tests.helpers import FakeResponse, FakeSession

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import inspect
 import shutil
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -10,12 +11,15 @@ import pytest
 
 from wordstat_mcp.api_settings import WordstatSettings
 from wordstat_mcp.exceptions import WordstatError
+from wordstat_mcp.operators import WORDSTAT_OPERATORS_AGENT_GUIDE
 from wordstat_mcp.tools import (
+    build_wordstat_phrase,
     get_dynamics,
     get_regions_distribution,
     get_regions_tree,
     get_top,
     load_regions_tree_cache,
+    mcp,
     save_regions_tree_cache,
     update_regions_tree,
     wordstat_env_health,
@@ -129,6 +133,19 @@ async def test_get_dynamics_posts_rfc3339_payload(
 
 
 @pytest.mark.anyio
+async def test_get_dynamics_rejects_unsupported_wordstat_operators(
+    patched_tool_dependencies: list[FakeWordstatClient],
+) -> None:
+    with pytest.raises(Exception, match="getDynamics supports only"):
+        await get_dynamics(
+            phrases=['"купить авто"'],
+            fromDate="2026-01-01T00:00:00Z",
+        )
+
+    assert patched_tool_dependencies == []
+
+
+@pytest.mark.anyio
 async def test_get_regions_distribution_posts_phrase_payload(
     patched_tool_dependencies: list[FakeWordstatClient],
 ) -> None:
@@ -149,6 +166,69 @@ async def test_get_regions_distribution_posts_phrase_payload(
             },
         )
     ]
+
+
+def test_tool_function_parameters_keep_raw_api_names() -> None:
+    assert "numPhrases" in inspect.signature(get_top).parameters
+    assert "pageSize" in inspect.signature(get_top).parameters
+    assert "fromDate" in inspect.signature(get_dynamics).parameters
+    assert "toDate" in inspect.signature(get_dynamics).parameters
+    assert "pageSize" in inspect.signature(get_regions_distribution).parameters
+
+
+@pytest.mark.anyio
+async def test_build_wordstat_phrase_tool_returns_phrase_payload() -> None:
+    response = await build_wordstat_phrase(
+        natural_query="Покажи топ по точной фразе купить авто",
+        target_method="getTop",
+        base_phrase="купить авто",
+        exact_word_count=True,
+    )
+
+    assert response["phrase"] == '"купить авто"'
+    assert response["target_method"] == "getTop"
+    assert response["resource_uri"] == "wordstat://operators/agent-guide"
+    assert response["prompt_name"] == "wordstat_phrase_builder"
+
+
+@pytest.mark.anyio
+async def test_wordstat_operator_resource_and_prompt_are_registered() -> None:
+    resources = await mcp.list_resources()
+    prompts = await mcp.list_prompts()
+
+    assert any(str(resource.uri) == "wordstat://operators/agent-guide" for resource in resources)
+    assert any(prompt.name == "wordstat_phrase_builder" for prompt in prompts)
+
+    contents = await mcp.read_resource("wordstat://operators/agent-guide")
+    assert "".join(item.content for item in contents) == WORDSTAT_OPERATORS_AGENT_GUIDE
+
+    prompt = await mcp.get_prompt(
+        "wordstat_phrase_builder",
+        {
+            "user_request": "Покажи динамику работы из дома",
+            "target_method": "getDynamics",
+        },
+    )
+    rendered = prompt.messages[0].content.text
+    assert "build_wordstat_phrase" in rendered
+    assert "Покажи динамику работы из дома" in rendered
+
+
+@pytest.mark.anyio
+async def test_public_mcp_tool_names_match_documented_api_names() -> None:
+    tools = {tool.name for tool in await mcp.list_tools()}
+
+    assert {
+        "build_wordstat_phrase",
+        "getTop",
+        "getDynamics",
+        "getRegionsDistribution",
+        "getRegionsTree",
+        "update_regions_tree",
+        "wordstat_env_health",
+    } <= tools
+    assert "get_top" not in tools
+    assert "get_dynamics" not in tools
 
 
 @pytest.mark.anyio

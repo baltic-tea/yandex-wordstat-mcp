@@ -7,8 +7,14 @@ import pytest
 from wordstat_mcp.tools import (
     _fetch_many,
     _clean_phrases,
+    _validate_dynamics_phrases,
     paginate,
     split_phrases,
+)
+from wordstat_mcp.operators import (
+    WordstatPhraseBuilder,
+    build_wordstat_phrase_payload,
+    validate_dynamics_phrase,
 )
 
 
@@ -26,6 +32,112 @@ def test_clean_phrases_trims_values() -> None:
 )
 def test_clean_phrases_skips_invalid_values(phrases: list[str]) -> None:
     assert _clean_phrases(phrases) == []
+
+
+def test_validate_dynamics_phrase_allows_plus_operator() -> None:
+    validate_dynamics_phrase("работа +из дома")
+
+
+@pytest.mark.parametrize(
+    "phrase",
+    [
+        '"купить авто"',
+        "купить !собаку",
+        "билеты [из москвы в париж]",
+        "заказать (суши|пиццу)",
+    ],
+)
+def test_validate_dynamics_phrase_rejects_unsupported_operators(
+    phrase: str,
+) -> None:
+    with pytest.raises(ValueError, match="getDynamics supports only"):
+        validate_dynamics_phrase(phrase)
+
+
+def test_validate_dynamics_phrases_checks_each_phrase() -> None:
+    with pytest.raises(ValueError, match="unsupported operator"):
+        _validate_dynamics_phrases(["работа +из дома", '"купить авто"'])
+
+
+def test_build_wordstat_phrase_applies_exact_and_stop_word_rules() -> None:
+    result = build_wordstat_phrase_payload(
+        WordstatPhraseBuilder(
+            natural_query="Покажи топ по точной фразе работа из дома",
+            target_method="getTop",
+            base_phrase="работа из дома",
+            exact_word_count=True,
+            required_stop_words=["из"],
+        )
+    )
+
+    assert result["phrase"] == '"работа +из дома"'
+    assert result["applied_operators"] == ['" "', "+"]
+    assert result["warnings"] == []
+
+
+def test_build_wordstat_phrase_applies_order_and_alternatives() -> None:
+    result = build_wordstat_phrase_payload(
+        WordstatPhraseBuilder(
+            natural_query="Сравни регионы для ремонта ноутбука или компьютера",
+            target_method="getRegionsDistribution",
+            base_phrase="ремонт",
+            alternatives=["ноутбука", "компьютера"],
+            fixed_word_order=True,
+        )
+    )
+
+    assert result["phrase"] == "[ремонт (ноутбука|компьютера)]"
+    assert result["applied_operators"] == ["()", "[]", "|"]
+
+
+def test_build_wordstat_phrase_strips_unsupported_dynamics_operators() -> None:
+    result = build_wordstat_phrase_payload(
+        WordstatPhraseBuilder(
+            natural_query="Покажи динамику точной фразы работа из дома",
+            target_method="getDynamics",
+            base_phrase='"работа из дома"',
+            exact_word_count=True,
+            required_stop_words=["из"],
+        )
+    )
+
+    assert result["phrase"] == "работа +из дома"
+    assert result["applied_operators"] == ["+"]
+    assert result["warnings"]
+
+
+@pytest.mark.parametrize(
+    "builder_kwargs",
+    [
+        {"base_phrase": "заказать (суши|пиццу)"},
+        {"base_phrase": "заказать еду", "alternatives": ["суши", "пиццу"]},
+    ],
+)
+def test_build_wordstat_phrase_rejects_dynamics_alternatives(
+    builder_kwargs: dict[str, object],
+) -> None:
+    with pytest.raises(ValueError, match="cannot represent Wordstat alternatives"):
+        build_wordstat_phrase_payload(
+            WordstatPhraseBuilder(
+                natural_query="Покажи динамику для суши или пиццы",
+                target_method="getDynamics",
+                **builder_kwargs,
+            )
+        )
+
+
+def test_build_wordstat_phrase_marks_repeated_required_stop_words() -> None:
+    result = build_wordstat_phrase_payload(
+        WordstatPhraseBuilder(
+            natural_query="Сравни маршрут",
+            target_method="getTop",
+            base_phrase="билеты из Москвы в Париж из Самары",
+            required_stop_words=["из", "в"],
+        )
+    )
+
+    assert result["phrase"] == "билеты +из Москвы +в Париж +из Самары"
+    assert result["applied_operators"] == ["+"]
 
 
 def test_split_phrases_creates_expected_chunks() -> None:
