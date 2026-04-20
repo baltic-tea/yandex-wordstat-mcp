@@ -1,3 +1,5 @@
+🇬🇧 [English](./README.md) | 🇷🇺 [Русский](./docs/README_RU.md)
+
 # Yandex Wordstat MCP Server
 
 MCP server for Yandex Wordstat API v2, built with `FastMCP`.
@@ -5,10 +7,10 @@ MCP server for Yandex Wordstat API v2, built with `FastMCP`.
 ## Features
 
 - MCP tools for Yandex Wordstat API v2 methods:
-    - getTop
-    - getDynamics
-    - getRegionsDistribution
-    - getRegionsTree
+    - [getTop](https://aistudio.yandex.ru/docs/ru/search-api/api-ref/Wordstat/getTop.html)
+    - [getDynamics](https://aistudio.yandex.ru/docs/ru/search-api/api-ref/Wordstat/getDynamics.html)
+    - [getRegionsDistribution](https://aistudio.yandex.ru/docs/ru/search-api/api-ref/Wordstat/getRegionsDistribution.html)
+    - [getRegionsTree](https://aistudio.yandex.ru/docs/ru/search-api/api-ref/Wordstat/getRegionsTree.html)
 - Authentication with API-key or IAM-token.
 - Batch phrase processing with pagination
 - Typed request models
@@ -88,12 +90,22 @@ The server uses stdio transport through `FastMCP`.
 
 Returns top and associated phrases for one or more input phrases.
 
+### `build_wordstat_phrase`
+
+Builds and validates a Wordstat `phrase` from a natural-language Russian request
+and optional intent hints. Use it before `getTop`, `getDynamics`, or
+`getRegionsDistribution` when the user asks for exact phrases, fixed word order,
+required stop words, fixed word forms, or alternatives in natural language.
+
 ### `getDynamics`
 
 Returns demand dynamics for one or more phrases over a date range.
 
 `fromDate` and `toDate` should be RFC3339 timestamps, for example
 `2026-01-01T00:00:00Z`.
+
+Wordstat dynamics supports only the `+` operator. The server rejects
+`getDynamics` phrases that contain `!`, quotes, `[]`, `()`, or `|`.
 
 ### `getRegionsDistribution`
 
@@ -115,6 +127,21 @@ exists.
 ### `wordstat_env_health`
 
 Returns local configuration health without calling the external API.
+
+## Prompt And Resource
+
+The server exposes MCP guidance for agents that need to build Wordstat phrases
+from natural language:
+
+- Resource: `wordstat://operators/agent-guide`
+- Prompt: `wordstat_phrase_builder`
+- Tool: `build_wordstat_phrase`
+
+MCP prompts and resources are advisory context. A server can expose them and
+describe when to use them, but the consuming MCP client or LLM decides whether to
+load and follow them. Critical constraints are enforced in tools instead:
+`getDynamics` validates operator usage server-side, and `build_wordstat_phrase`
+returns warnings when it has to drop unsupported operators.
 
 ## Integration
 
