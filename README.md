@@ -43,6 +43,15 @@ macOS / Linux:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
+```
+
+Basic setup:
+```bash
+pip install .
+```
+
+Dvelopment setup:
+```bash
 pip install -e .
 ```
 
@@ -51,11 +60,15 @@ Windows PowerShell:
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
+```
 
-// base installation
+Basic setup:
+```powershell
 pip install .
+```
 
-// for development
+Dvelopment setup:
+```powershell
 pip install -e .
 ```
 
