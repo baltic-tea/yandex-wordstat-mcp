@@ -30,9 +30,9 @@ class WordstatSettings(BaseSettings):
     folder_id: str = Field(min_length=1)
     iam_token: SecretStr | None = Field(default=None)
     api_key: SecretStr | None = Field(default=None)
-    api_http_url: AnyHttpUrl = Field(
+    api_http_url: AnyHttpUrl | str = Field(
         default="https://searchapi.api.cloud.yandex.net/v2/wordstat/",
-        alias=AliasChoices("api_url", "base_url"),
+        validation_alias=AliasChoices("api_url", "base_url"),
     )
     timeout_seconds: int | float = Field(default=30, ge=0)
     backoff_seconds: int | float = Field(default=0.5, ge=0)

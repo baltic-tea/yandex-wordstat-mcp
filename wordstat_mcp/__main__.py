@@ -16,7 +16,7 @@ def main() -> None:
         format="%(asctime)s %(levelname)s %(name)s %(message)s",
     )
 
-    WordstatSettings()
+    WordstatSettings()  # type: ignore[call-arg]
     mcp.run()
 
 

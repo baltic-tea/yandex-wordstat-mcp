@@ -1,9 +1,11 @@
 "Async MCP tools for Yandex Wordstat API v2."
 
 from __future__ import annotations
-from typing_extensions import Self
+from collections.abc import Mapping
+from datetime import datetime, timedelta
 from functools import lru_cache
 from pathlib import Path
+from typing_extensions import Self
 
 import asyncio
 import json
@@ -13,7 +15,8 @@ import re
 from typing import Any, Awaitable, Callable
 
 import aiohttp
-from pydantic import ValidationError
+from mcp.types import ToolAnnotations
+from pydantic import TypeAdapter, ValidationError
 from mcp.server.fastmcp import FastMCP
 from mcp.server.fastmcp.exceptions import ToolError
 
@@ -32,6 +35,16 @@ from wordstat_mcp.models import (
     WordstatPeriods,
     WordstatRegionModes,
 )
+from wordstat_mcp.operators import (
+    OPERATORS_GUIDE_RESOURCE_URI,
+    OPERATORS_PROMPT_NAME,
+    WORDSTAT_OPERATORS_AGENT_GUIDE,
+    WordstatPhraseBuilder,
+    WordstatSearchMethod,
+    build_wordstat_phrase_payload,
+    render_wordstat_phrase_builder_prompt,
+    validate_dynamics_phrase,
+)
 
 logger = logging.getLogger("wordstat_mcp")
 
@@ -41,22 +54,28 @@ TIME_TO_REFILL_PATTERN = re.compile(
     r"time to refill:\s*(?P<seconds>\d+(?:\.\d+)?)\s*seconds",
     re.IGNORECASE,
 )
-
-ANNOTATIONS = {
-    "readOnlyHint": True,
-    "destructiveHint": False,
-    "idempotentHint": True,
-    "openWorldHint": True,
-}
-
+DATETIME_ADAPTER = TypeAdapter(datetime)
 REGIONS_TREE_CACHE_PATH = Path(".saved") / "regions_tree.json"
-
-mcp = FastMCP(name="Yandex Wordstat MCP Server")
 
 
 @lru_cache(maxsize=1)
 def wordstat_settings() -> WordstatSettings:
-    return WordstatSettings()
+    return WordstatSettings()  # type: ignore[call-arg]
+
+
+def tool_annotations(title: str) -> ToolAnnotations:
+    """Build common read-only MCP tool annotations."""
+
+    return ToolAnnotations(
+        title=title,
+        readOnlyHint=True,
+        destructiveHint=False,
+        idempotentHint=True,
+        openWorldHint=True,
+    )
+
+
+mcp = FastMCP(name="Yandex Wordstat MCP Server")
 
 
 def _to_tool_error(exc: Exception, *, operation: str) -> ToolError:
@@ -90,6 +109,13 @@ def _clean_phrases(phrases: list[str]) -> list[str]:
         except ValidationError as e:
             logger.info(f"Skipping invalid phrase: {phrase}. Error: {e}")
     return cleaned
+
+
+def _validate_dynamics_phrases(phrases: list[str]) -> None:
+    """Validate Wordstat operator usage for the dynamics API."""
+
+    for phrase in phrases:
+        validate_dynamics_phrase(phrase)
 
 
 def load_regions_tree_cache(
@@ -157,6 +183,27 @@ def paginate(items: list[Any], page: int = 1, page_size: int = 50) -> dict[str, 
     }
 
 
+def default_from_date(period: str) -> datetime:
+    today = datetime.now()
+    match period:
+        case "PERIOD_MONTHLY":
+            return today - timedelta(days=365)
+        case "PERIOD_WEEKLY":
+            return today - timedelta(days=90)
+        case "PERIOD_DAILY":
+            return today - timedelta(days=30)
+        case _:
+            raise ValueError(f"Unsupported period: {period}")
+
+
+def parse_datetime(value: str | datetime) -> datetime:
+    """Parse datetime-like tool input for typed request models."""
+
+    if isinstance(value, datetime):
+        return value
+    return DATETIME_ADAPTER.validate_python(value)
+
+
 class WordstatClient:
     """Asynchronous HTTP client for Yandex Wordstat API v2."""
 
@@ -181,9 +228,7 @@ class WordstatClient:
             self._session = None
 
     @staticmethod
-    def _extract_retry_after(
-        headers: aiohttp.typedefs.LooseHeaders, body: str
-    ) -> float | None:
+    def _extract_retry_after(headers: Mapping[str, str], body: str) -> float | None:
         retry_after = headers.get("Retry-After")
         if retry_after:
             try:
@@ -208,7 +253,7 @@ class WordstatClient:
     def _format_error_message(
         status: int,
         body: str,
-        headers: aiohttp.typedefs.LooseHeaders,
+        headers: Mapping[str, str],
     ) -> str:
         message = f"HTTP {status}"
 
@@ -352,14 +397,91 @@ async def _fetch_many(
     return paginate(indexed_results, page=page, page_size=page_size)
 
 
+@mcp.resource(
+    OPERATORS_GUIDE_RESOURCE_URI,
+    name="wordstat_operators_agent_guide",
+    title="Wordstat Operators Agent Guide",
+    description=(
+        "Operator-selection rules for building Yandex Wordstat `phrase` values. "
+        "Agents should read this before converting natural-language requests "
+        "into Wordstat phrases."
+    ),
+    mime_type="text/markdown",
+)
+def wordstat_operators_agent_guide() -> str:
+    """Return Wordstat operator guidance for MCP clients."""
+
+    return WORDSTAT_OPERATORS_AGENT_GUIDE
+
+
+@mcp.prompt(
+    name=OPERATORS_PROMPT_NAME,
+    title="Build a Yandex Wordstat Phrase",
+    description=(
+        "Preset prompt that instructs an agent how to convert a natural-language "
+        "request into a Wordstat `phrase` while respecting operator limits."
+    ),
+)
+def wordstat_phrase_builder(
+    user_request: str,
+    target_method: WordstatSearchMethod = "getTop",
+) -> str:
+    """Prepare an agent to build a valid Wordstat phrase."""
+
+    return render_wordstat_phrase_builder_prompt(user_request, target_method)
+
+
+@mcp.tool(
+    name="build_wordstat_phrase",
+    description=(
+        "Build and validate a Yandex Wordstat `phrase` from a natural-language "
+        "request and optional explicit intent hints. Use this before "
+        "`getTop`, `getDynamics`, or `getRegionsDistribution` when a user asks in "
+        "natural language. Reads the same rules exposed by the "
+        f"`{OPERATORS_PROMPT_NAME}` prompt and `{OPERATORS_GUIDE_RESOURCE_URI}` "
+        "resource. For getDynamics, returns only phrases compatible with the `+` "
+        "operator restriction."
+    ),
+    annotations=tool_annotations("Build Wordstat Phrase"),
+)
+async def build_wordstat_phrase(
+    natural_query: str,
+    target_method: WordstatSearchMethod,
+    base_phrase: str | None = None,
+    exact_word_count: bool = False,
+    fixed_word_order: bool = False,
+    alternatives: list[str] | None = None,
+    fixed_forms: list[str] | None = None,
+    required_stop_words: list[str] | None = None,
+) -> dict[str, Any]:
+    """Build a valid Wordstat phrase with warnings and explanation."""
+
+    try:
+        request = WordstatPhraseBuilder(
+            natural_query=natural_query,
+            target_method=target_method,
+            base_phrase=base_phrase,
+            exact_word_count=exact_word_count,
+            fixed_word_order=fixed_word_order,
+            alternatives=alternatives or [],
+            fixed_forms=fixed_forms or [],
+            required_stop_words=required_stop_words or [],
+        )
+        return build_wordstat_phrase_payload(request)
+    except (ValueError, ValidationError) as exc:
+        raise _to_tool_error(exc, operation="build_wordstat_phrase") from exc
+
+
 @mcp.tool(
     name="getTop",
     description=(
         "Find top popular queries containing one or more input phrases and related "
         "queries for the last 30 days. Use this when the user wants popular search "
-        "variations, related keywords, or phrase expansion ideas."
+        "variations, related keywords, or phrase expansion ideas. When the user "
+        "describes the phrase in natural language, call `build_wordstat_phrase` "
+        "first or apply the `wordstat_phrase_builder` prompt/resource guidance."
     ),
-    annotations={"title": "Top Queries", **ANNOTATIONS},
+    annotations=tool_annotations("Top Queries"),
 )
 async def get_top(
     phrases: list[str],
@@ -380,8 +502,8 @@ async def get_top(
                 request = GetTopRequest(
                     phrase=phrase,
                     numPhrases=numPhrases,
-                    regions=regions,
-                    devices=devices,
+                    regions=[str(region) for region in regions or []],
+                    devices=devices or [],
                 )
                 return {
                     "phrase": phrase,
@@ -407,23 +529,31 @@ async def get_top(
         "The frequency of searches containing a specific keyword or phrase "
         "over a given period, aggregated by month, week, or day."
         "Use this when the user wants time-series popularity, trend changes, "
-        "or historical demand within a selected period and date range."
+        "or historical demand within a selected period and date range. Wordstat "
+        "dynamics supports only the `+` operator; this tool rejects phrases with "
+        "`!`, quotes, `[]`, `()`, or `|`. Use `build_wordstat_phrase` first for "
+        "natural-language requests."
     ),
-    annotations={"title": "Query Demand Dynamics", **ANNOTATIONS},
+    annotations=tool_annotations("Query Demand Dynamics"),
 )
 async def get_dynamics(
     phrases: list[str],
     period: WordstatPeriods = "PERIOD_MONTHLY",
-    fromDate: str = "",
-    toDate: str | None = None,
+    fromDate: str | datetime | None = None,
+    toDate: datetime | str | None = None,
     regions: list[int] | None = None,
     devices: list[WordstatDevices] | None = None,
     page: int = 1,
     pageSize: int = 50,
 ) -> dict[str, Any]:
     """Get query demand dynamics for one or many phrases."""
+
+    from_date = parse_datetime(fromDate or default_from_date(period))
+    to_date = parse_datetime(toDate) if toDate is not None else None
+
     try:
         cleaned_phrases = _clean_phrases(phrases)
+        _validate_dynamics_phrases(cleaned_phrases)
         settings = wordstat_settings()
 
         async with WordstatClient(settings) as client:
@@ -432,10 +562,10 @@ async def get_dynamics(
                 request = GetDynamicsRequest(
                     phrase=phrase,
                     period=period,
-                    fromDate=fromDate,
-                    toDate=toDate,
-                    regions=regions,
-                    devices=devices,
+                    fromDate=from_date,
+                    toDate=to_date,
+                    regions=[str(region) for region in regions or []],
+                    devices=devices or [],
                 )
                 return {
                     "phrase": phrase,
@@ -461,9 +591,11 @@ async def get_dynamics(
         "Return the distribution of the number of search queries containing "
         "the given keyword or phrase globally by region for the last 30 days."
         "Use this when the user wants to compare demand by regions or cities, or "
-        "understand geographic concentration of a query."
+        "understand geographic concentration of a query. When the user describes "
+        "the phrase in natural language, call `build_wordstat_phrase` first or "
+        "apply the `wordstat_phrase_builder` prompt/resource guidance."
     ),
-    annotations={"title": "Regional Distribution", **ANNOTATIONS},
+    annotations=tool_annotations("Regional Distribution"),
 )
 async def get_regions_distribution(
     phrases: list[str],
@@ -507,7 +639,7 @@ async def get_regions_distribution(
         "Return a hierarchical tree of Wordstat-supported regions."
         "Use this before other tools when region identifiers are needed."
     ),
-    annotations={"title": "Regions Tree", **ANNOTATIONS},
+    annotations=tool_annotations("Regions Tree"),
 )
 async def get_regions_tree() -> dict[str, Any]:
     """Get full tree of supported regions."""
@@ -530,7 +662,7 @@ async def get_regions_tree() -> dict[str, Any]:
         "Refresh the local Wordstat regions tree cache from the API and save it to local disk."
         "Use this when the user suspects that region data is outdated or after a change."
     ),
-    annotations={"title": "Update Wordstat Regions Tree Cache", **ANNOTATIONS},
+    annotations=tool_annotations("Update Wordstat Regions Tree Cache"),
 )
 async def update_regions_tree() -> dict[str, Any]:
     """Refresh cached tree of supported regions from Wordstat API."""
@@ -546,7 +678,7 @@ async def update_regions_tree() -> dict[str, Any]:
 @mcp.tool(
     name="wordstat_env_health",
     description="Check server health and configuration.",
-    annotations={"title": "Wordstat Environment Health", **ANNOTATIONS},
+    annotations=tool_annotations("Wordstat Environment Health"),
 )
 async def wordstat_env_health() -> dict[str, Any]:
     """Return server health snapshot without external API call.

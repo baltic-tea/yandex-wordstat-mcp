@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing_extensions import Self
 import numbers
 
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from typing import Any, Literal
 
 from pydantic import (
@@ -22,7 +22,7 @@ WordstatRegionModes = Literal["REGION_ALL", "REGION_REGIONS", "REGION_CITIES"]
 
 
 class CustomModel(BaseModel):
-    model_config = ConfigDict(case_sensitive=False, str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True)
 
     def to_payload(self) -> dict[str, Any]:
         return self.model_dump(by_alias=True, exclude_none=True)
@@ -69,10 +69,21 @@ class GetTopRequest(RegionsDevicesModel):
 class GetDynamicsRequest(RegionsDevicesModel):
     period: WordstatPeriods = "PERIOD_MONTHLY"
     from_date: datetime = Field(alias="fromDate")
-    to_date: datetime = Field(default_factory=datetime.now, alias="toDate")
+    to_date: datetime | None = Field(
+        default_factory=lambda: datetime.now(UTC), alias="toDate"
+    )
+
+    @field_validator("to_date", mode="before")
+    @classmethod
+    def validate_to_date(cls, value: Any) -> datetime:
+        if value is None:
+            return datetime.now(UTC)
+        return value
 
     @model_validator(mode="after")
     def validate_date_range(self) -> Self:
+        if self.to_date is None:
+            return self
         if self.from_date > self.to_date:
             return self.model_copy(
                 update={"from_date": self.to_date, "to_date": self.from_date}
@@ -82,8 +93,8 @@ class GetDynamicsRequest(RegionsDevicesModel):
     @field_serializer("from_date", "to_date")
     def serialize_dt(self, value: datetime) -> str:
         if value.tzinfo is None:
-            return f"{value.isoformat()}Z"
-        return value.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
+            value = value.replace(tzinfo=UTC)
+        return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
 
 
 class GetRegionsDistributionRequest(PhraseModel):
