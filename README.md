@@ -91,6 +91,60 @@ wordstat-mcp
 
 The server uses stdio transport through `FastMCP`.
 
+## Docker / Podman
+
+Build the image from the repository root:
+
+```bash
+docker build -t yandex-wordstat-mcp:latest .
+```
+
+Run the server over stdio:
+
+```bash
+docker run --rm -i \
+  -e WORDSTAT_FOLDER_ID=your-folder-id \
+  -e WORDSTAT_API_KEY=your-api-key \
+  yandex-wordstat-mcp:latest
+```
+
+Use `-e WORDSTAT_IAM_TOKEN=your-iam-token` instead of
+`-e WORDSTAT_API_KEY=your-api-key` when authenticating with an IAM token.
+Add `-v wordstat-mcp-cache:/app/.saved` if you want to persist the Wordstat
+regions cache between container runs.
+
+For Podman, use the same commands with `podman` instead of `docker`:
+
+```bash
+podman build -t yandex-wordstat-mcp:latest .
+podman run --rm -i \
+  -e WORDSTAT_FOLDER_ID=your-folder-id \
+  -e WORDSTAT_API_KEY=your-api-key \
+  yandex-wordstat-mcp:latest
+```
+
+Example MCP client config for a local Docker image:
+
+```json
+{
+  "mcpServers": {
+    "yandex-wordstat": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "-e",
+        "WORDSTAT_FOLDER_ID=your-folder-id",
+        "-e",
+        "WORDSTAT_API_KEY=your-api-key",
+        "yandex-wordstat-mcp:latest"
+      ]
+    }
+  }
+}
+```
+
 ## Available Tools
 
 ### `getTop`

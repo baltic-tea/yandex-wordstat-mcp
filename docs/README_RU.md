@@ -91,6 +91,60 @@ wordstat-mcp
 
 Сервер использует stdio-транспорт через `FastMCP`.
 
+## Docker / Podman
+
+Соберите image из корня репозитория:
+
+```bash
+docker build -t yandex-wordstat-mcp:latest .
+```
+
+Запустите сервер через stdio:
+
+```bash
+docker run --rm -i \
+  -e WORDSTAT_FOLDER_ID=your-folder-id \
+  -e WORDSTAT_API_KEY=your-api-key \
+  yandex-wordstat-mcp:latest
+```
+
+Используйте `-e WORDSTAT_IAM_TOKEN=your-iam-token` вместо
+`-e WORDSTAT_API_KEY=your-api-key`, если аутентифицируетесь через IAM token.
+Добавьте `-v wordstat-mcp-cache:/app/.saved`, если нужно сохранять Wordstat
+regions cache между запусками container.
+
+Для Podman используйте те же команды, заменив `docker` на `podman`:
+
+```bash
+podman build -t yandex-wordstat-mcp:latest .
+podman run --rm -i \
+  -e WORDSTAT_FOLDER_ID=your-folder-id \
+  -e WORDSTAT_API_KEY=your-api-key \
+  yandex-wordstat-mcp:latest
+```
+
+Пример MCP client config для локального Docker image:
+
+```json
+{
+  "mcpServers": {
+    "yandex-wordstat": {
+      "command": "docker",
+      "args": [
+        "run",
+        "--rm",
+        "-i",
+        "-e",
+        "WORDSTAT_FOLDER_ID=your-folder-id",
+        "-e",
+        "WORDSTAT_API_KEY=your-api-key",
+        "yandex-wordstat-mcp:latest"
+      ]
+    }
+  }
+}
+```
+
 ## Доступные инструменты
 
 ### `getTop`
