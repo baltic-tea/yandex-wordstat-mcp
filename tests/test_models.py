@@ -253,6 +253,30 @@ def test_get_dynamics_request_normalizes_monthly_date_range() -> None:
     assert request.to_payload()["toDate"] == "2026-04-30T23:59:59.999999Z"
 
 
+def test_get_dynamics_request_normalizes_future_monthly_to_date_to_month_end() -> None:
+    request = GetDynamicsRequest(
+        phrase="заказать роллы",
+        period="PERIOD_MONTHLY",
+        fromDate="2026-01-01T23:59:59.999999Z",
+        toDate="2026-04-15T23:59:59.999999Z",
+    )
+
+    assert request.to_payload()["fromDate"] == "2026-01-01T00:00:00Z"
+    assert request.to_payload()["toDate"] == "2026-04-30T23:59:59.999999Z"
+
+
+def test_get_dynamics_request_preserves_future_month_end_as_period_end() -> None:
+    request = GetDynamicsRequest(
+        phrase="заказать роллы",
+        period="PERIOD_MONTHLY",
+        fromDate="2026-01-01T00:00:00Z",
+        toDate="2028-02-29T12:34:56Z",
+    )
+
+    assert request.to_payload()["fromDate"] == "2026-01-01T00:00:00Z"
+    assert request.to_payload()["toDate"] == "2028-02-29T23:59:59.999999Z"
+
+
 def test_get_dynamics_request_normalizes_weekly_date_range() -> None:
     request = GetDynamicsRequest(
         phrase="python",
@@ -263,6 +287,30 @@ def test_get_dynamics_request_normalizes_weekly_date_range() -> None:
 
     assert request.to_payload()["fromDate"] == "2026-04-06T00:00:00Z"
     assert request.to_payload()["toDate"] == "2026-04-26T23:59:59.999999Z"
+
+
+def test_get_dynamics_request_normalizes_future_weekly_dates_to_monday_sunday() -> None:
+    request = GetDynamicsRequest(
+        phrase="заказать роллы",
+        period="PERIOD_WEEKLY",
+        fromDate="2026-06-04T23:59:59.999999Z",
+        toDate="2026-04-30T23:59:59.999999Z",
+    )
+
+    assert request.to_payload()["fromDate"] == "2026-04-27T00:00:00Z"
+    assert request.to_payload()["toDate"] == "2026-06-07T23:59:59.999999Z"
+
+
+def test_get_dynamics_request_preserves_future_sunday_as_period_end() -> None:
+    request = GetDynamicsRequest(
+        phrase="заказать роллы",
+        period="PERIOD_WEEKLY",
+        fromDate="2026-01-01T00:00:00Z",
+        toDate="2027-01-03T12:34:56Z",
+    )
+
+    assert request.to_payload()["fromDate"] == "2025-12-29T00:00:00Z"
+    assert request.to_payload()["toDate"] == "2027-01-03T23:59:59.999999Z"
 
 
 def test_get_dynamics_request_normalizes_daily_date_range() -> None:

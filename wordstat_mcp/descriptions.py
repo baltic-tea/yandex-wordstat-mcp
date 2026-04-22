@@ -52,7 +52,7 @@ GET_TOP = (
     "<instructions>Use find_regions first when the user names cities or regions. "
     "Use build_wordstat_phrase first when the request implies exact phrase, "
     "fixed word order, fixed forms, alternatives, or required stop words. This "
-    "is the API-compatible tool name; aliases call this tool internally.</instructions>\n"
+    "is the API-compatible tool name.</instructions>\n"
     "<returns>Paginated phrase results with phrase-level raw Wordstat "
     "topRequests payloads.</returns>\n"
     f"{WORDSTAT_API_GET_TOP}"

@@ -255,7 +255,12 @@ async def get_dynamics(
     ],
     fromDate: Annotated[
         str | datetime,
-        Field(description="RFC3339 start date, e.g. 2026-04-09T00:00:00Z."),
+        Field(
+            description=(
+                "RFC3339 start date, e.g. 2026-04-09T00:00:00Z; "
+                "period boundary is normalized automatically."
+            )
+        ),
     ],
     period: Annotated[
         WordstatPeriods,
@@ -263,7 +268,12 @@ async def get_dynamics(
     ] = "PERIOD_MONTHLY",
     toDate: Annotated[
         datetime | str | None,
-        Field(description="Optional RFC3339 end date; defaults to current UTC time."),
+        Field(
+            description=(
+                "Optional RFC3339 end date; defaults to current UTC time and "
+                "normalizes to the period boundary automatically."
+            )
+        ),
     ] = None,
     regions: Annotated[
         list[int | str] | None,

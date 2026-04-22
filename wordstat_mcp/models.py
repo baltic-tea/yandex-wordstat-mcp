@@ -113,27 +113,27 @@ def fix_date_range(
     if from_date is None:
         raise ValueError("from_date is required.")
 
-    _from = from_date
-    _to = to_date if to_date else datetime.now(UTC)
+    dt_from = from_date
+    dt_to = to_date if to_date else datetime.now(UTC)
 
-    if ensure_utc(_from) > ensure_utc(_to):
-        _from, _to = _to, _from
+    if ensure_utc(dt_from) > ensure_utc(dt_to):
+        dt_from, dt_to = dt_to, dt_from
 
     if enable_period_rules:
         match period:
             case "PERIOD_MONTHLY":
-                _from = _from.replace(day=1)
-                next_month = (_to.replace(day=28) + timedelta(days=4)).replace(day=1)
-                _to = next_month - timedelta(days=1)
+                dt_from = dt_from.replace(day=1)
+                next_month = (dt_to.replace(day=28) + timedelta(days=4)).replace(day=1)
+                dt_to = next_month - timedelta(days=1)
             case "PERIOD_WEEKLY":
-                _from = _from - timedelta(days=_from.weekday())
-                _to = _to - timedelta(days=_to.weekday()) + timedelta(days=6)
+                dt_from = dt_from - timedelta(days=dt_from.weekday())
+                dt_to = dt_to - timedelta(days=dt_to.weekday()) + timedelta(days=6)
             case "PERIOD_DAILY":
                 pass
             case _:
                 raise ValueError(f"Unsupported period: {period}")
 
-    return start_of_day(_from), end_of_day(_to)
+    return start_of_day(dt_from), end_of_day(dt_to)
 
 
 class CustomModel(BaseModel):
