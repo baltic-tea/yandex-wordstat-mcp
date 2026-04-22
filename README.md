@@ -77,7 +77,9 @@ pip install -e .
 
 Copy `.env.example` to `.env` and fill in your credentials.
 
-`WORDSTAT_FOLDER_ID` is required for each API request. `WORDSTAT_IAM_TOKEN` will be preferred if `WORDSTAT_API_KEY` is also specified
+`WORDSTAT_FOLDER_ID` is required for each API request. Set either
+`WORDSTAT_API_KEY` or `WORDSTAT_IAM_TOKEN`; if both are specified,
+`WORDSTAT_IAM_TOKEN` is used.
 
 ## Running The Server
 
@@ -215,6 +217,9 @@ The examples below use the `uvx` + Git launch pattern:
 }
 ```
 
+Use `"WORDSTAT_IAM_TOKEN": "your-iam-token"` instead of
+`"WORDSTAT_API_KEY": "your-api-key"` when authenticating with an IAM token.
+
 For development from a clone, use `wordstat-mcp` from the activated virtual
 environment or `uv run wordstat-mcp` inside the repository.
 
@@ -233,6 +238,9 @@ claude mcp add yandex-wordstat --scope project --transport stdio \
   -- uvx --from git+https://github.com/baltic-tea/yandex-wordstat-mcp.git wordstat-mcp
 ```
 
+Use `--env WORDSTAT_IAM_TOKEN=your-iam-token` instead of
+`--env WORDSTAT_API_KEY=your-api-key` when authenticating with an IAM token.
+
 Verify:
 
 ```bash
@@ -249,6 +257,9 @@ Claude Code also supports importing a JSON server definition:
 ```bash
 claude mcp add-json yandex-wordstat '{"type":"stdio","command":"uvx","args":["--from","git+https://github.com/baltic-tea/yandex-wordstat-mcp.git","wordstat-mcp"],"env":{"WORDSTAT_FOLDER_ID":"your-folder-id","WORDSTAT_API_KEY":"your-api-key"}}'
 ```
+
+For IAM-token authentication, replace `WORDSTAT_API_KEY` with
+`WORDSTAT_IAM_TOKEN` in the JSON `env` object.
 
 ### Codex
 
@@ -273,6 +284,9 @@ args = ["--from", "git+https://github.com/baltic-tea/yandex-wordstat-mcp.git", "
 WORDSTAT_FOLDER_ID = "your-folder-id"
 WORDSTAT_API_KEY = "your-api-key"
 ```
+
+For IAM-token authentication, replace `WORDSTAT_API_KEY` with
+`WORDSTAT_IAM_TOKEN`.
 
 Verify:
 

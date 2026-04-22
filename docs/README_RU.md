@@ -77,7 +77,9 @@ pip install -e .
 
 Скопируйте `.env.example` в `.env` и заполните учетные данные.
 
-`WORDSTAT_FOLDER_ID` обязателен для каждого API-запроса. Если вместе с `WORDSTAT_API_KEY` указан `WORDSTAT_IAM_TOKEN`, будет использован `WORDSTAT_IAM_TOKEN`.
+`WORDSTAT_FOLDER_ID` обязателен для каждого API-запроса. Укажите либо
+`WORDSTAT_API_KEY`, либо `WORDSTAT_IAM_TOKEN`; если указаны оба значения, будет
+использован `WORDSTAT_IAM_TOKEN`.
 
 ## Запуск сервера
 
@@ -218,6 +220,9 @@ tools: `getDynamics` валидирует операторы на стороне
 }
 ```
 
+Используйте `"WORDSTAT_IAM_TOKEN": "your-iam-token"` вместо
+`"WORDSTAT_API_KEY": "your-api-key"`, если аутентифицируетесь через IAM token.
+
 Для разработки из клона используйте `wordstat-mcp` из активированного
 виртуального окружения или `uv run wordstat-mcp` внутри репозитория.
 
@@ -236,6 +241,9 @@ claude mcp add yandex-wordstat --scope project --transport stdio \
   -- uvx --from git+https://github.com/baltic-tea/yandex-wordstat-mcp.git wordstat-mcp
 ```
 
+Используйте `--env WORDSTAT_IAM_TOKEN=your-iam-token` вместо
+`--env WORDSTAT_API_KEY=your-api-key`, если аутентифицируетесь через IAM token.
+
 Проверка:
 
 ```bash
@@ -252,6 +260,9 @@ Claude Code также поддерживает импорт JSON-описани
 ```bash
 claude mcp add-json yandex-wordstat '{"type":"stdio","command":"uvx","args":["--from","git+https://github.com/baltic-tea/yandex-wordstat-mcp.git","wordstat-mcp"],"env":{"WORDSTAT_FOLDER_ID":"your-folder-id","WORDSTAT_API_KEY":"your-api-key"}}'
 ```
+
+Для IAM-token authentication замените `WORDSTAT_API_KEY` на
+`WORDSTAT_IAM_TOKEN` в JSON object `env`.
 
 ### Codex
 
@@ -276,6 +287,9 @@ args = ["--from", "git+https://github.com/baltic-tea/yandex-wordstat-mcp.git", "
 WORDSTAT_FOLDER_ID = "your-folder-id"
 WORDSTAT_API_KEY = "your-api-key"
 ```
+
+Для IAM-token authentication замените `WORDSTAT_API_KEY` на
+`WORDSTAT_IAM_TOKEN`.
 
 Проверка:
 
