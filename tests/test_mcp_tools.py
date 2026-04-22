@@ -335,22 +335,25 @@ async def test_public_mcp_tool_open_world_hints_match_side_effects() -> None:
 async def test_public_mcp_tool_descriptions_include_wordstat_api_methods() -> None:
     tools = {tool.name: tool for tool in await mcp.list_tools()}
 
-    assert (
-        "<api>method=Wordstat.GetTop; endpoint=topRequests</api>"
-        in (tools["getTop"].description or "")
+    assert "<api>" in (tools["getTop"].description or "")
+    assert "method=Wordstat.GetTop" in (tools["getTop"].description or "")
+    assert "endpoint=topRequests" in (tools["getTop"].description or "")
+    assert "task=keyword_discovery" in (tools["getTop"].description or "")
+    assert "method=Wordstat.GetDynamics" in (tools["getDynamics"].description or "")
+    assert "endpoint=dynamics" in (tools["getDynamics"].description or "")
+    assert "task=demand_trends" in (tools["getDynamics"].description or "")
+    assert "method=Wordstat.GetRegionsDistribution" in (
+        tools["getRegionsDistribution"].description or ""
     )
-    assert (
-        "<api>method=Wordstat.GetDynamics; endpoint=dynamics</api>"
-        in (tools["getDynamics"].description or "")
+    assert "endpoint=regions" in (tools["getRegionsDistribution"].description or "")
+    assert "task=regional_distribution" in (
+        tools["getRegionsDistribution"].description or ""
     )
-    assert (
-        "<api>method=Wordstat.GetRegionsDistribution; endpoint=regions</api>"
-        in (tools["getRegionsDistribution"].description or "")
+    assert "method=Wordstat.GetRegionsTree" in (
+        tools["getRegionsTree"].description or ""
     )
-    assert (
-        "<api>method=Wordstat.GetRegionsTree; endpoint=getRegionsTree</api>"
-        in (tools["getRegionsTree"].description or "")
-    )
+    assert "endpoint=getRegionsTree" in (tools["getRegionsTree"].description or "")
+    assert "task=region_index" in (tools["getRegionsTree"].description or "")
     health_description = tools["wordstat_env_health"].description or ""
     assert "Use only for troubleshooting" in health_description
     assert "does not call the external Wordstat API" in health_description

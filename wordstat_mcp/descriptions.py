@@ -5,14 +5,22 @@ from __future__ import annotations
 from wordstat_mcp.operators import OPERATORS_GUIDE_RESOURCE_URI, OPERATORS_PROMPT_NAME
 
 
-WORDSTAT_API_GET_TOP = "<api>method=Wordstat.GetTop; endpoint=topRequests</api>"
-WORDSTAT_API_GET_DYNAMICS = "<api>method=Wordstat.GetDynamics; endpoint=dynamics</api>"
+WORDSTAT_API_GET_TOP = (
+    "<api>method=Wordstat.GetTop; endpoint=topRequests; "
+    "tool=getTop; task=keyword_discovery</api>"
+)
+WORDSTAT_API_GET_DYNAMICS = (
+    "<api>method=Wordstat.GetDynamics; endpoint=dynamics; "
+    "tool=getDynamics; task=demand_trends</api>"
+)
 WORDSTAT_API_GET_REGIONS_DISTRIBUTION = (
-    "<api>method=Wordstat.GetRegionsDistribution; endpoint=regions</api>"
+    "<api>method=Wordstat.GetRegionsDistribution; endpoint=regions; "
+    "tool=getRegionsDistribution; task=regional_distribution</api>"
 )
 
 WORDSTAT_API_GET_REGIONS_TREE = (
-    "<api>method=Wordstat.GetRegionsTree; endpoint=getRegionsTree</api>"
+    "<api>method=Wordstat.GetRegionsTree; endpoint=getRegionsTree; "
+    "tool=getRegionsTree; task=region_index</api>"
 )
 WORDSTAT_OPERATORS_AGENT_GUIDE = (
     "Operator-selection rules for building Yandex Wordstat `phrase` values. "
@@ -46,7 +54,6 @@ BUILD_WORDSTAT_PHRASE = (
 GET_TOP = (
     "Find popular search queries and related keyword expansions for the last "
     "available Wordstat demand window.\n"
-    f"{WORDSTAT_API_GET_TOP}\n"
     "<usecase>Use when user asks for top queries, keyword ideas, related "
     "phrases, search-demand variants, keyword clusters, or phrase expansion. "
     "Use this for discovery, not time-series trend questions.</usecase>\n"
@@ -55,13 +62,13 @@ GET_TOP = (
     "fixed word order, fixed forms, alternatives, or required stop words. This "
     "is the API-compatible tool name; aliases call this tool internally.</instructions>\n"
     "<returns>Paginated phrase results with phrase-level raw Wordstat "
-    "topRequests payloads.</returns>"
+    "topRequests payloads.</returns>\n"
+    f"{WORDSTAT_API_GET_TOP}"
 )
 
 GET_DYNAMICS = (
     "Get search-demand dynamics for phrases over daily, weekly, or monthly "
     "periods.\n"
-    f"{WORDSTAT_API_GET_DYNAMICS}\n"
     "<usecase>Use when user asks about popularity over time, seasonality, "
     "growth or decline, monthly/weekly/daily dynamics, historical demand, or "
     "comparisons across periods.</usecase>\n"
@@ -71,13 +78,13 @@ GET_DYNAMICS = (
     "user names geographic filters."
     "</instructions>\n"
     "<returns>Paginated phrase results with phrase-level raw Wordstat dynamics "
-    "payloads.</returns>"
+    "payloads.</returns>\n"
+    f"{WORDSTAT_API_GET_DYNAMICS}"
 )
 
 GET_REGIONS_DISTRIBUTION = (
     "Compare search demand by regions or cities for phrases during the last "
     "available Wordstat demand window.\n"
-    f"{WORDSTAT_API_GET_REGIONS_DISTRIBUTION}\n"
     "<usecase>Use when user asks where demand is strongest, wants regional "
     "distribution, compares cities/regions, prioritizes markets, or needs a "
     "ranked geography table.</usecase>\n"
@@ -86,42 +93,43 @@ GET_REGIONS_DISTRIBUTION = (
     "region IDs as filters in getTop or getDynamics. Set region mode to cities "
     "for city-level comparison.</instructions>\n"
     "<returns>Paginated phrase results with phrase-level raw Wordstat regional "
-    "payloads.</returns>"
+    "payloads.</returns>\n"
+    f"{WORDSTAT_API_GET_REGIONS_DISTRIBUTION}"
 )
 
 GET_REGIONS_TREE = (
     "Return a compact local index of Wordstat region names and IDs."
-    f"\n{WORDSTAT_API_GET_REGIONS_TREE}"
     "\n<usecase>Use for debugging, cache inspection, or bulk lookup of cached "
     "region IDs. For a named city or region request, prefer find_regions.</usecase>\n"
     "<instructions>Prefer find_regions for targeted region lookup. Keys in "
     "`by_name` are lowercase region names and values are ID lists. `by_id` "
     "contains normalized names and region paths. If cache is absent, this tool "
     "fetches and saves the region tree.</instructions>\n"
-    "<returns>Region index with by_name, by_id, message, next_action.</returns>"
+    "<returns>Region index with by_name, by_id, message, next_action.</returns>\n"
+    f"{WORDSTAT_API_GET_REGIONS_TREE}"
 )
 
 FIND_REGIONS = (
     "Find Yandex Wordstat region IDs by region name.\n"
-    f"{WORDSTAT_API_GET_REGIONS_TREE}\n"
     "<usecase>Use when user mentions a city, region, or place name and another "
     "tool needs numeric region IDs. Use this before getTop/getDynamics filters "
     "or when building city comparison tables.</usecase>\n"
     "<instructions>Searches cached region index by exact, substring, and path "
     "matches. If cache is missing, fetches the region tree once and saves the "
     "local index. Use returned `id` values in `regions` parameters.</instructions>\n"
-    "<returns>Matching region candidates with id, name, path, matchType, and next action.</returns>"
+    "<returns>Matching region candidates with id, name, path, matchType, and next action.</returns>\n"
+    f"{WORDSTAT_API_GET_REGIONS_TREE}"
 )
 
 UPDATE_REGIONS_TREE = (
     "Refresh the local Wordstat region index cache from the API.\n"
-    f"{WORDSTAT_API_GET_REGIONS_TREE}\n"
     "<usecase>Use when region lookup looks outdated, cache is invalid, or "
     "find_regions cannot locate an expected official region.</usecase>\n"
     "<instructions>This writes `.saved/regions_tree.json` but does not modify "
     "remote data. Prefer find_regions for normal lookup; this is a cache "
     "maintenance tool.</instructions>\n"
-    "<returns>Fresh region index with by_name, by_id, message, next_action.</returns>"
+    "<returns>Fresh region index with by_name, by_id, message, next_action.</returns>\n"
+    f"{WORDSTAT_API_GET_REGIONS_TREE}"
 )
 
 WORDSTAT_ENV_HEALTH = (
