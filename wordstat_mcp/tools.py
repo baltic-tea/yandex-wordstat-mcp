@@ -22,6 +22,13 @@ from wordstat_mcp.helpers import (
     validate_dynamics_phrases,
     wordstat_settings,
 )
+from wordstat_mcp.healthcheck import mcp_healthcheck
+from wordstat_mcp.metadata import (
+    SERVER_DESCRIPTION,
+    SERVER_DOCUMENTATION_URL,
+    SERVER_NAME,
+    get_server_version,
+)
 from wordstat_mcp.models import (
     GetDynamicsResponse,
     GetDynamicsRequest,
@@ -47,7 +54,12 @@ from wordstat_mcp.operators import (
 )
 
 
-mcp = FastMCP(name="Yandex Wordstat MCP Server")
+mcp = FastMCP(
+    name=SERVER_NAME,
+    version=get_server_version(),
+    instructions=SERVER_DESCRIPTION,
+    website_url=SERVER_DOCUMENTATION_URL,
+)
 
 
 @mcp.resource(
@@ -192,7 +204,7 @@ async def get_top(
     page: Annotated[int, Field(ge=1, description="1-based response page.")] = 1,
     pageSize: Annotated[
         int, Field(ge=1, description="Number of phrase-level items per page.")
-] = 50,
+    ] = 50,
 ) -> GetTopResponse:
     """Get top and associated phrases for one or many input phrases."""
     try:
@@ -281,7 +293,7 @@ async def get_dynamics(
     page: Annotated[int, Field(ge=1, description="1-based response page.")] = 1,
     pageSize: Annotated[
         int, Field(ge=1, description="Number of phrase-level items per page.")
-] = 50,
+    ] = 50,
 ) -> GetDynamicsResponse:
     """Get query demand dynamics for one or many phrases."""
 
@@ -358,7 +370,7 @@ async def get_regions_distribution(
     page: Annotated[int, Field(ge=1, description="1-based response page.")] = 1,
     pageSize: Annotated[
         int, Field(ge=1, description="Number of phrase-level items per page.")
-] = 50,
+    ] = 50,
 ) -> GetRegionsDistributionResponse:
     """Get region distribution for one or many phrases."""
     try:
@@ -527,7 +539,7 @@ async def find_keyword_queries(
     page: Annotated[int, Field(ge=1, description="1-based response page.")] = 1,
     pageSize: Annotated[
         int, Field(ge=1, description="Number of phrase-level items per page.")
-] = 50,
+    ] = 50,
 ) -> GetTopResponse:
     """AI-first alias for getTop."""
     return await get_top(
@@ -586,7 +598,7 @@ async def get_query_demand_trends(
     page: Annotated[int, Field(ge=1, description="1-based response page.")] = 1,
     pageSize: Annotated[
         int, Field(ge=1, description="Number of phrase-level items per page.")
-] = 50,
+    ] = 50,
 ) -> GetDynamicsResponse:
     """AI-first alias for getDynamics."""
     return await get_dynamics(
@@ -629,7 +641,7 @@ async def compare_query_demand_by_region(
     page: Annotated[int, Field(ge=1, description="1-based response page.")] = 1,
     pageSize: Annotated[
         int, Field(ge=1, description="Number of phrase-level items per page.")
-] = 50,
+    ] = 50,
 ) -> GetRegionsDistributionResponse:
     """AI-first alias for getRegionsDistribution."""
     return await get_regions_distribution(
@@ -664,13 +676,6 @@ async def wordstat_env_health() -> dict[str, Any]:
     """
 
     try:
-        settings = wordstat_settings()
-        return {
-            "status": "ok",
-            "apiUrl": settings.api_url,
-            "timeoutSeconds": settings.timeout_seconds,
-            "maxAttempts": settings.max_attempts,
-            "maxConcurrency": settings.max_concurrency,
-        }
+        return mcp_healthcheck(wordstat_settings())
     except WordstatConfigError as e:
         return {"status": "error", "message": str(e)}
