@@ -5,22 +5,14 @@ from __future__ import annotations
 from wordstat_mcp.operators import OPERATORS_GUIDE_RESOURCE_URI, OPERATORS_PROMPT_NAME
 
 
-WORDSTAT_API_GET_TOP = (
-    "<api>method=Wordstat.GetTop; endpoint=topRequests; "
-    "tool=getTop; task=keyword_discovery</api>"
-)
-WORDSTAT_API_GET_DYNAMICS = (
-    "<api>method=Wordstat.GetDynamics; endpoint=dynamics; "
-    "tool=getDynamics; task=demand_trends</api>"
-)
+WORDSTAT_API_GET_TOP = "<api>method=Wordstat.GetTop; endpoint=topRequests</api>"
+WORDSTAT_API_GET_DYNAMICS = "<api>method=Wordstat.GetDynamics; endpoint=dynamics</api>"
 WORDSTAT_API_GET_REGIONS_DISTRIBUTION = (
-    "<api>method=Wordstat.GetRegionsDistribution; endpoint=regions; "
-    "tool=getRegionsDistribution; task=regional_distribution</api>"
+    "<api>method=Wordstat.GetRegionsDistribution; endpoint=regions</api>"
 )
 
 WORDSTAT_API_GET_REGIONS_TREE = (
-    "<api>method=Wordstat.GetRegionsTree; endpoint=getRegionsTree; "
-    "tool=getRegionsTree; task=region_index</api>"
+    "<api>method=Wordstat.GetRegionsTree; endpoint=getRegionsTree</api>"
 )
 WORDSTAT_OPERATORS_AGENT_GUIDE = (
     "Operator-selection rules for building Yandex Wordstat `phrase` values. "
