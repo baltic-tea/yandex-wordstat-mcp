@@ -1,4 +1,4 @@
-﻿# Wordstat Operators Guide for AI Agents
+# Wordstat Operators Guide for AI Agents
 
 Source: [Yandex Wordstat, Operators](https://yandex.com/support2/wordstat/en/content/operators).
 
