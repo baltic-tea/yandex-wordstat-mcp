@@ -1,3 +1,12 @@
+from fastmcp.exceptions import ToolError
+
+
+def to_tool_error(exc: Exception, *, operation: str) -> ToolError:
+    """Convert domain exception into MCP ``ToolError``."""
+
+    return ToolError(f"{operation} failed: {exc}")
+
+
 class WordstatError(RuntimeError):
     """Generic Wordstat API error."""
 
