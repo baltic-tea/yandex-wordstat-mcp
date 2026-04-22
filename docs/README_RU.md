@@ -62,15 +62,6 @@ macOS / Linux:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-```
-
-Обычная установка:
-```bash
-pip install .
-```
-
-Установка для разработки:
-```bash
 pip install -e .
 ```
 
@@ -79,15 +70,6 @@ Windows PowerShell:
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-```
-
-Обычная установка:
-```powershell
-pip install .
-```
-
-Установка для разработки:
-```powershell
 pip install -e .
 ```
 
@@ -96,36 +78,6 @@ pip install -e .
 Скопируйте `.env.example` в `.env` и заполните учетные данные.
 
 `WORDSTAT_FOLDER_ID` обязателен для каждого API-запроса. Если вместе с `WORDSTAT_API_KEY` указан `WORDSTAT_IAM_TOKEN`, будет использован `WORDSTAT_IAM_TOKEN`.
-
-## Сборка из исходников
-
-Шаги сборки:
-
-1. Установите зависимости через `uv sync --all-groups` или `pip install -e .`.
-2. Если используете `pip`, убедитесь, что виртуальное окружение активировано.
-3. Запустите команду сборки ниже.
-
-```bash
-uv build
-```
-
-## Проверки разработки
-
-Обязательные локальные проверки перед завершением изменения:
-
-```bash
-uv run ruff check .
-uv run mypy wordstat_mcp
-uv run pytest
-uv build
-```
-
-Дополнительная диагностика:
-
-- `uv run deptry .` проверяет гигиену зависимостей и должен оставаться чистым
-  после изменений зависимостей.
-- `uv run ty check .` здесь экспериментален, если не добавлена отдельная
-  конфигурация под текущие Pydantic alias-паттерны.
 
 ## Запуск сервера
 

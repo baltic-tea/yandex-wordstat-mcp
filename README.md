@@ -62,15 +62,6 @@ macOS / Linux:
 ```bash
 python -m venv .venv
 source .venv/bin/activate
-```
-
-Basic setup:
-```bash
-pip install .
-```
-
-Development setup:
-```bash
 pip install -e .
 ```
 
@@ -79,15 +70,6 @@ Windows PowerShell:
 ```powershell
 python -m venv .venv
 .venv\Scripts\Activate.ps1
-```
-
-Basic setup:
-```powershell
-pip install .
-```
-
-Development setup:
-```powershell
 pip install -e .
 ```
 
@@ -96,36 +78,6 @@ pip install -e .
 Copy `.env.example` to `.env` and fill in your credentials.
 
 `WORDSTAT_FOLDER_ID` is required for each API request. `WORDSTAT_IAM_TOKEN` will be preferred if `WORDSTAT_API_KEY` is also specified
-
-## Build From Source
-
-Build steps:
-
-1. Install dependencies with `uv sync --all-groups` or `pip install -e .`.
-2. Ensure the virtual environment is active if you use `pip`.
-3. Run the build command below.
-
-```bash
-uv build
-```
-
-## Development Checks
-
-Required local gates before finishing a change:
-
-```bash
-uv run ruff check .
-uv run mypy wordstat_mcp
-uv run pytest
-uv build
-```
-
-Optional diagnostics:
-
-- `uv run deptry .` checks dependency hygiene and should stay clean after
-  dependency changes.
-- `uv run ty check .` is experimental here unless the project adds explicit
-  configuration for current Pydantic alias patterns.
 
 ## Running The Server
 
