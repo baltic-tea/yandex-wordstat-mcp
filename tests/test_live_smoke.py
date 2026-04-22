@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from dotenv import dotenv_values
 
-from wordstat_mcp.tools import (
+from wordstat_mcp.server import (
     find_regions,
     wordstat_env_health,
     get_dynamics,

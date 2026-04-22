@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 
 from wordstat_mcp.api_settings import WordstatSettings
-from wordstat_mcp.tools import mcp
+from wordstat_mcp.server import mcp
 
 
 def main() -> None:

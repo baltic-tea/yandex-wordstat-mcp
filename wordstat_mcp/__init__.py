@@ -7,7 +7,7 @@ def __getattr__(name: str) -> object:
     """Lazily expose package-level MCP server."""
 
     if name == "mcp":
-        from wordstat_mcp.tools import mcp
+        from wordstat_mcp.server import mcp
 
         return mcp
     raise AttributeError(name)

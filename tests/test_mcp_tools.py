@@ -21,7 +21,7 @@ from wordstat_mcp.helpers import (
     save_regions_tree_cache,
 )
 from wordstat_mcp.operators import WORDSTAT_OPERATORS_AGENT_GUIDE
-from wordstat_mcp.tools import (
+from wordstat_mcp.server import (
     build_wordstat_phrase,
     compare_query_demand_by_region,
     find_keyword_queries,
@@ -66,7 +66,7 @@ def patched_tool_dependencies(
     clients: list[FakeWordstatClient] = []
 
     monkeypatch.setattr(
-        "wordstat_mcp.tools.wordstat_settings",
+        "wordstat_mcp.server.wordstat_settings",
         lambda: wordstat_settings,
     )
 
@@ -75,7 +75,7 @@ def patched_tool_dependencies(
         clients.append(client)
         return client
 
-    monkeypatch.setattr("wordstat_mcp.tools.WordstatClient", client_factory)
+    monkeypatch.setattr("wordstat_mcp.server.WordstatClient", client_factory)
     return clients
 
 
@@ -427,7 +427,7 @@ async def test_wordstat_env_health_returns_ok_status(
     wordstat_settings: WordstatSettings,
 ) -> None:
     monkeypatch.setattr(
-        "wordstat_mcp.tools.wordstat_settings",
+        "wordstat_mcp.server.wordstat_settings",
         lambda: wordstat_settings,
     )
 
@@ -563,7 +563,7 @@ async def test_find_regions_uses_cached_index_and_returns_duplicate_names(
     def fail_settings() -> None:
         pytest.fail("settings should not be loaded when cache exists")
 
-    monkeypatch.setattr("wordstat_mcp.tools.wordstat_settings", fail_settings)
+    monkeypatch.setattr("wordstat_mcp.server.wordstat_settings", fail_settings)
 
     response = await find_regions("троицк")
 
@@ -683,7 +683,7 @@ async def test_get_regions_tree_uses_cache_without_api(
     def fail_settings() -> None:
         pytest.fail("settings should not be loaded when cache exists")
 
-    monkeypatch.setattr("wordstat_mcp.tools.wordstat_settings", fail_settings)
+    monkeypatch.setattr("wordstat_mcp.server.wordstat_settings", fail_settings)
 
     response = await get_regions_tree()
 
@@ -706,7 +706,7 @@ async def test_get_regions_tree_fetches_and_saves_missing_cache(
     clients: list[FakeWordstatClient] = []
     monkeypatch.chdir(workspace_tmp_path)
     monkeypatch.setattr(
-        "wordstat_mcp.tools.wordstat_settings",
+        "wordstat_mcp.server.wordstat_settings",
         lambda: wordstat_settings,
     )
 
@@ -715,7 +715,7 @@ async def test_get_regions_tree_fetches_and_saves_missing_cache(
         clients.append(client)
         return client
 
-    monkeypatch.setattr("wordstat_mcp.tools.WordstatClient", client_factory)
+    monkeypatch.setattr("wordstat_mcp.server.WordstatClient", client_factory)
 
     response = await get_regions_tree()
 
@@ -745,14 +745,14 @@ async def test_update_regions_tree_refreshes_existing_cache(
     save_regions_tree_cache(old_payload, cache_path)
     monkeypatch.chdir(workspace_tmp_path)
     monkeypatch.setattr(
-        "wordstat_mcp.tools.wordstat_settings",
+        "wordstat_mcp.server.wordstat_settings",
         lambda: wordstat_settings,
     )
 
     def client_factory(settings: WordstatSettings) -> FakeWordstatClient:
         return FakeWordstatClient(settings=settings, response=fresh_payload)
 
-    monkeypatch.setattr("wordstat_mcp.tools.WordstatClient", client_factory)
+    monkeypatch.setattr("wordstat_mcp.server.WordstatClient", client_factory)
 
     response = await update_regions_tree()
 

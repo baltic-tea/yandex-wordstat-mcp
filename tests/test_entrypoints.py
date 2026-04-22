@@ -78,7 +78,7 @@ def test_module_execution_runs_main(monkeypatch: pytest.MonkeyPatch) -> None:
         ),
     )
     monkeypatch.setattr(
-        "wordstat_mcp.tools.mcp.run",
+        "wordstat_mcp.server.mcp.run",
         lambda: state.__setitem__("run_calls", state["run_calls"] + 1),
     )
     sys.modules.pop("wordstat_mcp.__main__", None)
