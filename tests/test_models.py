@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import pytest
 from pydantic import ValidationError
@@ -10,6 +10,7 @@ from wordstat_mcp.models import (
     GetRegionsDistributionRequest,
     GetRegionsTreeRequest,
     GetTopRequest,
+    fix_date_range,
 )
 
 
@@ -29,7 +30,7 @@ def test_get_top_request_accepts_integer_and_numeric_string_regions() -> None:
     request = GetTopRequest(
         phrase="python",
         numPhrases=10,
-        regions=[213, "2"],
+        regions=[213, " 2 "],
         devices=["DEVICE_DESKTOP"],
     )
 
@@ -42,9 +43,12 @@ def test_get_top_request_accepts_integer_and_numeric_string_regions() -> None:
     }
 
 
-@pytest.mark.parametrize("regions", [["moscow"], [1.5], [object()]])
+@pytest.mark.parametrize(
+    "regions",
+    [["moscow"], [1.5], [object()], [True], [False], [0], [-1], ["0"], ["-1"]],
+)
 def test_get_top_request_rejects_non_numeric_regions(regions: list[object]) -> None:
-    with pytest.raises(ValidationError, match="Region ID must be numeric"):
+    with pytest.raises(ValidationError, match="Region ID must be"):
         GetTopRequest(phrase="python", regions=regions)
 
 
@@ -55,7 +59,7 @@ def test_get_top_request_rejects_phrase_too_long() -> None:
 
 def test_get_top_request_enforces_region_and_device_limits() -> None:
     with pytest.raises(ValidationError, match="at most 100 items"):
-        GetTopRequest(phrase="python", regions=list(range(101)))
+        GetTopRequest(phrase="python", regions=list(range(1, 102)))
 
     with pytest.raises(ValidationError, match="at most 3 items"):
         GetTopRequest(
@@ -82,8 +86,8 @@ def test_get_dynamics_request_serializes_rfc3339_timestamps() -> None:
         "regions": [],
         "devices": [],
         "period": "PERIOD_DAILY",
-        "fromDate": "2026-01-01T00:00:00Z",
-        "toDate": "2026-01-31T00:00:00Z",
+        "fromDate": "2025-12-31T21:00:00Z",
+        "toDate": "2026-01-31T23:59:59.999999Z",
     }
 
 
@@ -95,19 +99,182 @@ def test_get_dynamics_request_serializes_naive_datetimes_as_utc() -> None:
     )
 
     assert request.to_payload()["fromDate"] == "2026-01-01T00:00:00Z"
-    assert request.to_payload()["toDate"] == "2026-01-31T00:00:00Z"
+    assert request.to_payload()["toDate"] == "2026-01-31T23:59:59.999999Z"
 
 
-def test_get_dynamics_request_preserves_inverted_date_range() -> None:
-    with pytest.warns(UserWarning, match="returning a value other than `self`"):
-        request = GetDynamicsRequest(
-            phrase="python",
-            fromDate="2026-02-01T00:00:00Z",
-            toDate="2026-01-01T00:00:00Z",
-        )
+def test_get_dynamics_request_requires_from_date() -> None:
+    with pytest.raises(ValidationError, match="Field required"):
+        GetDynamicsRequest(phrase="python")
 
-    assert request.to_payload()["fromDate"] == "2026-02-01T00:00:00Z"
-    assert request.to_payload()["toDate"] == "2026-01-01T00:00:00Z"
+
+@pytest.mark.parametrize(
+    ("period", "expected_to"),
+    [
+        ("PERIOD_MONTHLY", "2026-04-30T23:59:59.999999Z"),
+        ("PERIOD_WEEKLY", "2026-04-26T23:59:59.999999Z"),
+        ("PERIOD_DAILY", "2026-04-21T23:59:59.999999Z"),
+    ],
+)
+def test_get_dynamics_request_none_to_date_uses_current_utc_period_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+    period: str,
+    expected_to: str,
+) -> None:
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz: object = None) -> "FrozenDateTime":
+            current = cls(2026, 4, 21, 12, 34, 56, tzinfo=UTC)
+            if tz is None:
+                return current.replace(tzinfo=None)
+            return current
+
+    monkeypatch.setattr("wordstat_mcp.models.datetime", FrozenDateTime)
+
+    request = GetDynamicsRequest(
+        phrase="python",
+        period=period,
+        fromDate="2026-04-09T00:00:00Z",
+        toDate=None,
+    )
+
+    assert request.to_payload()["toDate"] == expected_to
+
+
+def test_get_dynamics_request_uses_input_timezone_for_period_boundaries() -> None:
+    request = GetDynamicsRequest(
+        phrase="python",
+        period="PERIOD_MONTHLY",
+        fromDate="2026-04-01T00:30:00+03:00",
+        toDate="2026-04-02T00:00:00+03:00",
+    )
+
+    assert request.to_payload()["fromDate"] == "2026-03-31T21:00:00Z"
+    assert request.to_payload()["toDate"] == "2026-04-30T20:59:59.999999Z"
+
+
+def test_get_dynamics_request_omitted_to_date_uses_current_utc_period_boundary(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz: object = None) -> "FrozenDateTime":
+            current = cls(2026, 4, 21, 12, 34, 56, tzinfo=UTC)
+            if tz is None:
+                return current.replace(tzinfo=None)
+            return current
+
+    monkeypatch.setattr("wordstat_mcp.models.datetime", FrozenDateTime)
+
+    request = GetDynamicsRequest(
+        phrase="python",
+        period="PERIOD_DAILY",
+        fromDate="2026-04-09T00:00:00Z",
+    )
+
+    assert request.to_payload()["toDate"] == "2026-04-21T23:59:59.999999Z"
+
+
+@pytest.mark.parametrize(
+    ("period", "from_date", "to_date", "expected_from", "expected_to"),
+    [
+        (
+            "PERIOD_MONTHLY",
+            datetime(2026, 4, 9, 13, 15, tzinfo=UTC),
+            datetime(2026, 4, 9, 13, 15, tzinfo=UTC),
+            "2026-04-01T00:00:00+00:00",
+            "2026-04-30T23:59:59.999999+00:00",
+        ),
+        (
+            "PERIOD_WEEKLY",
+            datetime(2026, 4, 9, 13, 15, tzinfo=UTC),
+            datetime(2026, 4, 9, 13, 15, tzinfo=UTC),
+            "2026-04-06T00:00:00+00:00",
+            "2026-04-12T23:59:59.999999+00:00",
+        ),
+        (
+            "PERIOD_DAILY",
+            datetime(2026, 4, 9, 13, 15, tzinfo=UTC),
+            datetime(2026, 4, 9, 23, 59, tzinfo=UTC),
+            "2026-04-09T00:00:00+00:00",
+            "2026-04-09T23:59:59.999999+00:00",
+        ),
+        (
+            "PERIOD_MONTHLY",
+            datetime(2026, 4, 9, tzinfo=UTC),
+            datetime(2026, 5, 2, tzinfo=UTC),
+            "2026-04-01T00:00:00+00:00",
+            "2026-05-31T23:59:59.999999+00:00",
+        ),
+        (
+            "PERIOD_WEEKLY",
+            datetime(2026, 4, 29, tzinfo=UTC),
+            datetime(2026, 5, 3, tzinfo=UTC),
+            "2026-04-27T00:00:00+00:00",
+            "2026-05-03T23:59:59.999999+00:00",
+        ),
+        (
+            "PERIOD_DAILY",
+            datetime(2026, 4, 30, 22, 30, tzinfo=UTC),
+            datetime(2026, 5, 1, 1, 15, tzinfo=UTC),
+            "2026-04-30T00:00:00+00:00",
+            "2026-05-01T23:59:59.999999+00:00",
+        ),
+        (
+            "PERIOD_MONTHLY",
+            datetime(2026, 5, 2, tzinfo=UTC),
+            datetime(2026, 4, 9, tzinfo=UTC),
+            "2026-04-01T00:00:00+00:00",
+            "2026-05-31T23:59:59.999999+00:00",
+        ),
+    ],
+)
+def test_fix_date_range_outputs_expected_period_boundaries(
+    period: str,
+    from_date: datetime,
+    to_date: datetime,
+    expected_from: str,
+    expected_to: str,
+) -> None:
+    fixed_from, fixed_to = fix_date_range(period, from_date, to_date)
+
+    assert fixed_from.isoformat() == expected_from
+    assert fixed_to.isoformat() == expected_to
+
+
+def test_get_dynamics_request_normalizes_monthly_date_range() -> None:
+    request = GetDynamicsRequest(
+        phrase="python",
+        period="PERIOD_MONTHLY",
+        fromDate="2026-04-09T00:00:00Z",
+        toDate="2026-04-21T00:00:00Z",
+    )
+
+    assert request.to_payload()["fromDate"] == "2026-04-01T00:00:00Z"
+    assert request.to_payload()["toDate"] == "2026-04-30T23:59:59.999999Z"
+
+
+def test_get_dynamics_request_normalizes_weekly_date_range() -> None:
+    request = GetDynamicsRequest(
+        phrase="python",
+        period="PERIOD_WEEKLY",
+        fromDate="2026-04-09T00:00:00Z",
+        toDate="2026-04-21T00:00:00Z",
+    )
+
+    assert request.to_payload()["fromDate"] == "2026-04-06T00:00:00Z"
+    assert request.to_payload()["toDate"] == "2026-04-26T23:59:59.999999Z"
+
+
+def test_get_dynamics_request_normalizes_daily_date_range() -> None:
+    request = GetDynamicsRequest(
+        phrase="python",
+        period="PERIOD_DAILY",
+        fromDate="2026-04-21T15:34:56Z",
+        toDate="2026-04-09T23:59:59Z",
+    )
+
+    assert request.to_payload()["fromDate"] == "2026-04-09T00:00:00Z"
+    assert request.to_payload()["toDate"] == "2026-04-21T23:59:59.999999Z"
 
 
 def test_request_models_keep_raw_api_aliases() -> None:
