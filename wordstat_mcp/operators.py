@@ -19,6 +19,9 @@ DYNAMICS_UNSUPPORTED_OPERATORS = frozenset({"!", '"', "[", "]", "(", ")", "|"})
 DYNAMICS_UNSUPPORTED_OPERATOR_PATTERN = re.compile(r'[!"\[\]()|]')
 DYNAMICS_ALTERNATIVE_OPERATOR_PATTERN = re.compile(r"[()|]")
 DYNAMICS_STRIPPABLE_UNSUPPORTED_OPERATOR_PATTERN = re.compile(r'[!"\[\]]')
+WARNING_BASE_PHRASE_INFERRED = "BASE_PHRASE_INFERRED"
+WARNING_DYNAMICS_OPERATOR_LIMIT = "DYNAMICS_OPERATOR_LIMIT"
+WARNING_DYNAMICS_OPERATORS_STRIPPED = "DYNAMICS_OPERATORS_STRIPPED"
 
 RUSSIAN_STOP_WORDS = frozenset(
     {
@@ -54,6 +57,9 @@ def load_wordstat_operators_agent_guide() -> str:
         .joinpath(OPERATORS_GUIDE_RESOURCE_NAME)
         .read_text(encoding="utf-8")
     )
+
+
+WORDSTAT_OPERATORS_AGENT_GUIDE = load_wordstat_operators_agent_guide()
 
 
 class WordstatPhraseBuilder(BaseModel):
@@ -186,10 +192,7 @@ def build_wordstat_phrase_payload(request: WordstatPhraseBuilder) -> dict[str, A
         phrase = _normalize_space(request.base_phrase)
     else:
         phrase, inferred = _extract_phrase_candidate(request.natural_query)
-        warnings.append(
-            "base_phrase was inferred with simple server-side heuristics. "
-            "Agents should pass base_phrase explicitly when they already parsed it."
-        )
+        warnings.append(WARNING_BASE_PHRASE_INFERRED)
 
     if not phrase:
         raise ValueError("Could not build a non-empty Wordstat phrase.")
@@ -207,15 +210,9 @@ def build_wordstat_phrase_payload(request: WordstatPhraseBuilder) -> dict[str, A
                 "operators. Pass separate phrases or use getTop/getRegionsDistribution."
             )
         if exact_word_count or fixed_word_order or fixed_forms:
-            warnings.append(
-                "getDynamics supports only the `+` operator. Ignored requested "
-                "exact-word-count, fixed-order, and fixed-form operators."
-            )
+            warnings.append(WARNING_DYNAMICS_OPERATOR_LIMIT)
         if DYNAMICS_STRIPPABLE_UNSUPPORTED_OPERATOR_PATTERN.search(phrase):
-            warnings.append(
-                "Removed unsupported Wordstat operators from phrase because "
-                "getDynamics supports only `+`."
-            )
+            warnings.append(WARNING_DYNAMICS_OPERATORS_STRIPPED)
             phrase = _strip_dynamics_unsupported_operators(phrase)
         phrase, plus_ops = _add_plus_to_stop_words(phrase, stop_words)
         applied_operators.extend(plus_ops)
@@ -225,10 +222,6 @@ def build_wordstat_phrase_payload(request: WordstatPhraseBuilder) -> dict[str, A
             "target_method": request.target_method,
             "applied_operators": sorted(set(applied_operators)),
             "warnings": warnings,
-            "explanation": (
-                "Built a dynamics-compatible phrase. Only `+` is allowed for "
-                "Wordstat dynamics; unsupported operators are omitted."
-            ),
             "needs_review": inferred,
             "resource_uri": OPERATORS_GUIDE_RESOURCE_URI,
             "prompt_name": OPERATORS_PROMPT_NAME,
@@ -266,22 +259,15 @@ def build_wordstat_phrase_payload(request: WordstatPhraseBuilder) -> dict[str, A
         "target_method": request.target_method,
         "applied_operators": sorted(set(applied_operators)),
         "warnings": warnings,
-        "explanation": (
-            "Built a Wordstat phrase from the provided natural-language request "
-            "and explicit intent hints."
-        ),
         "needs_review": inferred,
         "resource_uri": OPERATORS_GUIDE_RESOURCE_URI,
         "prompt_name": OPERATORS_PROMPT_NAME,
     }
 
 
-WORDSTAT_OPERATORS_AGENT_GUIDE = load_wordstat_operators_agent_guide()
-
-
 def render_wordstat_phrase_builder_prompt(
     user_request: str,
-    target_method: WordstatSearchMethod,
+    target_method: str,
 ) -> str:
     """Render the prompt exposed through MCP."""
 
@@ -294,14 +280,15 @@ Follow these instructions exactly:
 3. Prefer calling `build_wordstat_phrase` with an explicit `base_phrase` and
    intent hints before calling `getTop`, `getDynamics`, or
    `getRegionsDistribution`.
-4. For `getDynamics`, never use operators other than `+`. If the user asks for
-   exact phrases, fixed word order, fixed forms, or alternatives, explain that
-   Wordstat dynamics supports only `+`.
-5. Do not invent region IDs. Use `getRegionsTree` when region IDs are needed.
+4. For `getDynamics`, never use operators other than `+`. Keep operator
+   compatibility details internal unless the user asks about query syntax,
+   exactness, or why the phrase changed.
+5. Do not invent region IDs. Use `find_regions` when a user gives a city or
+   region name. Use `getRegionsTree` only for bulk/debug region index lookup.
 
 Target method: `{target_method}`
 User request: {user_request}
 
-Return a short plan, the final `phrase`, and any warning that should be shown to
-the user before calling the API.
+Return a short plan and the final `phrase`. Include warning codes only when the
+result needs user review.
 """
