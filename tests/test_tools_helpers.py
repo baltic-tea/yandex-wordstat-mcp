@@ -4,10 +4,12 @@ import asyncio
 
 import pytest
 
-from wordstat_mcp.tools import (
-    _fetch_many,
-    _clean_phrases,
-    _validate_dynamics_phrases,
+from wordstat_mcp.helpers import (
+    fetch_many,
+    clean_phrases,
+    clean_phrases_with_warnings,
+    clean_tool_phrases,
+    validate_dynamics_phrases,
     paginate,
     split_phrases,
 )
@@ -19,7 +21,7 @@ from wordstat_mcp.operators import (
 
 
 def test_clean_phrases_trims_values() -> None:
-    assert _clean_phrases(["  python  ", "asyncio"]) == ["python", "asyncio"]
+    assert clean_phrases(["  python  ", "asyncio"]) == ["python", "asyncio"]
 
 
 @pytest.mark.parametrize(
@@ -31,7 +33,25 @@ def test_clean_phrases_trims_values() -> None:
     ],
 )
 def test_clean_phrases_skips_invalid_values(phrases: list[str]) -> None:
-    assert _clean_phrases(phrases) == []
+    assert clean_phrases(phrases) == []
+
+
+def test_clean_phrases_with_warnings_reports_invalid_values() -> None:
+    cleaned, warnings = clean_phrases_with_warnings([" python ", "   "])
+
+    assert cleaned == ["python"]
+    assert len(warnings) == 1
+    assert "Skipped invalid phrase" in warnings[0]
+
+
+def test_clean_tool_phrases_rejects_empty_result() -> None:
+    with pytest.raises(ValueError, match="No valid phrases provided"):
+        clean_tool_phrases(["   "])
+
+
+def test_clean_tool_phrases_rejects_empty_input() -> None:
+    with pytest.raises(ValueError, match="At least one phrase is required"):
+        clean_tool_phrases([])
 
 
 def test_validate_dynamics_phrase_allows_plus_operator() -> None:
@@ -56,7 +76,7 @@ def test_validate_dynamics_phrase_rejects_unsupported_operators(
 
 def test_validate_dynamics_phrases_checks_each_phrase() -> None:
     with pytest.raises(ValueError, match="unsupported operator"):
-        _validate_dynamics_phrases(["работа +из дома", '"купить авто"'])
+        validate_dynamics_phrases(["работа +из дома", '"купить авто"'])
 
 
 def test_build_wordstat_phrase_applies_exact_and_stop_word_rules() -> None:
@@ -104,6 +124,26 @@ def test_build_wordstat_phrase_strips_unsupported_dynamics_operators() -> None:
     assert result["phrase"] == "работа +из дома"
     assert result["applied_operators"] == ["+"]
     assert result["warnings"]
+
+
+def test_build_wordstat_phrase_uses_machine_readable_warning_codes() -> None:
+    result = build_wordstat_phrase_payload(
+        WordstatPhraseBuilder(
+            natural_query="exact dynamics phrase",
+            target_method="getDynamics",
+            base_phrase='"foo bar"',
+            exact_word_count=True,
+        )
+    )
+
+    assert result["phrase"] == "foo bar"
+    assert result["warnings"] == [
+        "DYNAMICS_OPERATOR_LIMIT",
+        "DYNAMICS_OPERATORS_STRIPPED",
+    ]
+    assert "explanation" not in result
+    assert "message" not in result
+    assert "next_action" not in result
 
 
 @pytest.mark.parametrize(
@@ -194,7 +234,7 @@ async def test_fetch_many_respects_pagination_and_worker_output() -> None:
         in_flight -= 1
         return {"phrase": phrase}
 
-    result = await _fetch_many(
+    result = await fetch_many(
         phrases,
         worker,
         page=1,

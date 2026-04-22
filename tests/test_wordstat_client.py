@@ -7,7 +7,7 @@ import aiohttp
 import pytest
 
 from wordstat_mcp.exceptions import RetriableError, WordstatError
-from wordstat_mcp.tools import WordstatClient
+from wordstat_mcp.client import WordstatClient
 
 from tests.helpers import FakeResponse, FakeSession
 
@@ -28,7 +28,7 @@ async def test_client_context_manager_creates_and_closes_internal_session(
         return fake_session
 
     monkeypatch.setattr(
-        "wordstat_mcp.tools.aiohttp.ClientSession",
+        "wordstat_mcp.client.aiohttp.ClientSession",
         fake_client_session,
     )
 
@@ -177,10 +177,12 @@ async def test_request_json_retries_on_retryable_error(
     wordstat_settings,
 ) -> None:
     client = WordstatClient(wordstat_settings)
-    calls = {"count": 0, "delay": None}
+    calls: dict[str, int | float | None] = {"count": 0, "delay": None}
 
     async def fake_do_post(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
-        calls["count"] += 1
+        count = calls["count"]
+        assert isinstance(count, int)
+        calls["count"] = count + 1
         if calls["count"] < 3:
             raise RetriableError("temporary", retry_after=0.2)
         assert payload["folderId"] == "folder-1"
@@ -190,7 +192,7 @@ async def test_request_json_retries_on_retryable_error(
         calls["delay"] = delay
 
     monkeypatch.setattr(client, "_do_post", fake_do_post)
-    monkeypatch.setattr("wordstat_mcp.tools.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr("wordstat_mcp.client.asyncio.sleep", fake_sleep)
 
     response = await client.request_json("topRequests", {"phrase": "python"})
 
@@ -216,7 +218,7 @@ async def test_request_json_retries_on_transport_error(
         return None
 
     monkeypatch.setattr(client, "_do_post", fake_do_post)
-    monkeypatch.setattr("wordstat_mcp.tools.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr("wordstat_mcp.client.asyncio.sleep", fake_sleep)
 
     assert await client.request_json("topRequests", {"phrase": "python"}) == {
         "ok": True
@@ -239,7 +241,7 @@ async def test_request_json_fails_after_retry_limit(
         return None
 
     monkeypatch.setattr(client, "_do_post", fake_do_post)
-    monkeypatch.setattr("wordstat_mcp.tools.asyncio.sleep", fake_sleep)
+    monkeypatch.setattr("wordstat_mcp.client.asyncio.sleep", fake_sleep)
 
     with pytest.raises(WordstatError, match="still failing"):
         await client.request_json("topRequests", {"phrase": "python"})
@@ -263,5 +265,48 @@ async def test_request_json_keeps_explicit_folder_id(
     )
 
     assert payload["folderId"] == "override"
+
+
+@pytest.mark.anyio
+async def test_request_json_does_not_mutate_caller_payload(
+    monkeypatch: pytest.MonkeyPatch,
+    wordstat_settings,
+) -> None:
+    client = WordstatClient(wordstat_settings)
+
+    async def fake_do_post(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
+        return payload
+
+    monkeypatch.setattr(client, "_do_post", fake_do_post)
+
+    caller_payload = {"phrase": "python"}
+    request_payload = await client.request_json("topRequests", caller_payload)
+
+    assert caller_payload == {"phrase": "python"}
+    assert request_payload == {"phrase": "python", "folderId": "folder-1"}
+
+
+@pytest.mark.anyio
+async def test_request_json_default_payload_does_not_share_state(
+    monkeypatch: pytest.MonkeyPatch,
+    wordstat_settings,
+) -> None:
+    client = WordstatClient(wordstat_settings)
+    sent_payloads: list[dict[str, Any]] = []
+
+    async def fake_do_post(endpoint: str, payload: dict[str, Any]) -> dict[str, Any]:
+        sent_payloads.append(payload.copy())
+        payload["mutated_by_transport"] = True
+        return payload
+
+    monkeypatch.setattr(client, "_do_post", fake_do_post)
+
+    await client.request_json("getRegionsTree")
+    await client.request_json("getRegionsTree")
+
+    assert sent_payloads == [
+        {"folderId": "folder-1"},
+        {"folderId": "folder-1"},
+    ]
 
 

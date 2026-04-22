@@ -14,7 +14,11 @@ MCP server for Yandex Wordstat API v2, built with `FastMCP`.
 - Authentication with API-key or IAM-token.
 - Batch phrase processing with pagination
 - Typed request models
-- Local `.saved/regions_tree.json` cache for the Wordstat region tree
+- Local `.saved/regions_tree.json` cache for a compact Wordstat region lookup
+- Fast region lookup by name through `find_regions`
+- Operator-aware phrase builder for exact forms, stop words, word order, and alternatives
+- AI-first aliases for common keyword, trend, and regional demand tasks
+- Public tool descriptions include compact `<api>method=...; endpoint=...</api>` metadata
 - Retry handling for transient transport failures and `429/5xx`
 
 ## System Requirements
@@ -25,17 +29,30 @@ MCP server for Yandex Wordstat API v2, built with `FastMCP`.
 
 ## Installation
 
-Clone the repository first:
+For normal MCP client setup, run the server directly from Git with `uvx`:
+
+```bash
+uvx --from git+https://github.com/baltic-tea/yandex-wordstat-mcp.git wordstat-mcp
+```
+
+`uvx` creates an isolated environment and runs the `wordstat-mcp` console
+script exposed by the package.
+
+## Development Installation
+
+1. Clone the repository:
 
 ```bash
 git clone https://github.com/baltic-tea/yandex-wordstat-mcp.git
 cd yandex-wordstat-mcp
 ```
 
+2. Install dependencies with `uv` or `pip`.
+
 ### With `uv`
 
 ```bash
-uv sync
+uv sync --all-groups
 ```
 
 ### With `pip`
@@ -52,7 +69,7 @@ Basic setup:
 pip install .
 ```
 
-Dvelopment setup:
+Development setup:
 ```bash
 pip install -e .
 ```
@@ -69,7 +86,7 @@ Basic setup:
 pip install .
 ```
 
-Dvelopment setup:
+Development setup:
 ```powershell
 pip install -e .
 ```
@@ -92,12 +109,30 @@ Build steps:
 uv build
 ```
 
-## Running The Server
+## Development Checks
 
-Module entrypoint:
+Required local gates before finishing a change:
 
 ```bash
-python -m wordstat_mcp
+uv run ruff check .
+uv run mypy wordstat_mcp
+uv run pytest
+uv build
+```
+
+Optional diagnostics:
+
+- `uv run deptry .` checks dependency hygiene and should stay clean after
+  dependency changes.
+- `uv run ty check .` is experimental here unless the project adds explicit
+  configuration for current Pydantic alias patterns.
+
+## Running The Server
+
+Console entrypoint:
+
+```bash
+wordstat-mcp
 ```
 
 The server uses stdio transport through `FastMCP`.
@@ -119,8 +154,12 @@ required stop words, fixed word forms, or alternatives in natural language.
 
 Returns demand dynamics for one or more phrases over a date range.
 
-`fromDate` and `toDate` should be RFC3339 timestamps, for example
-`2026-01-01T00:00:00Z`.
+`fromDate` is required and should be an RFC3339 timestamp, for example
+`2026-01-01T00:00:00Z`. `toDate` is optional; when omitted, the server uses the
+current UTC timestamp. Request models normalize the range to Wordstat period
+boundaries: `fromDate` is moved to the start of the day, and `toDate` is moved
+to the end of the day (`23:59:59.999999Z`) after monthly, weekly, or daily
+period alignment.
 
 Wordstat dynamics supports only the `+` operator. The server rejects
 `getDynamics` phrases that contain `!`, quotes, `[]`, `()`, or `|`.
@@ -131,16 +170,56 @@ Returns regional distribution for one or more phrases.
 
 ### `getRegionsTree`
 
-Returns the full region tree supported by Yandex APIs.
+Returns a compact region index with lowercase region names and region IDs.
+The local cache is stored in `.saved/regions_tree.json` with this shape:
+
+```json
+{
+  "by_name": {
+    "зеленоград": ["216"],
+    "троицк": ["20674"]
+  },
+  "by_id": {
+    "216": {
+      "name": "Зеленоград",
+      "path": ["Россия", "Москва и Московская область", "Зеленоград"]
+    }
+  }
+}
+```
+
+`by_name` always maps a normalized lowercase name to a list of string IDs,
+because one visible region name can map to multiple Wordstat region IDs.
 
 When `.saved/regions_tree.json` exists, this tool reads it locally and does not
-call the external API. If the file is missing, the tool fetches the tree from the
-API and saves it to `.saved/regions_tree.json`.
+call the external API. If the file is missing, the tool fetches the region tree
+from the API, converts it to the compact index, and saves the index to
+`.saved/regions_tree.json`.
+
+### `find_regions`
+
+Finds region IDs by exact lowercase lookup first and substring fallback second.
+Use it before passing user-provided city or region names into the `regions`
+parameter of `getTop` or `getDynamics`.
+
+`find_regions` reads the cached `getRegionsTree` index, so repeated lookups are
+local after the first cache fill. For many city names in one task, agents can
+call `get_region_index` once and resolve exact matches from `by_name`; a
+separate batch lookup tool is usually not worth the extra API surface.
 
 ### `update_regions_tree`
 
-Refreshes `.saved/regions_tree.json` from the API even when a cached file already
-exists.
+Refreshes `.saved/regions_tree.json` from the API even when a cached lookup
+already exists.
+
+### AI-first aliases
+
+These tools expose the same behavior with task-oriented names:
+
+- `find_keyword_queries` delegates to `getTop`.
+- `get_query_demand_trends` delegates to `getDynamics`.
+- `compare_query_demand_by_region` delegates to `getRegionsDistribution`.
+- `get_region_index` delegates to `getRegionsTree`.
 
 ### `wordstat_env_health`
 
@@ -163,15 +242,18 @@ returns warnings when it has to drop unsupported operators.
 
 ## Integration
 
-The examples below use the local stdio launch pattern:
+The examples below use the `uvx` + Git launch pattern:
 
 ```json
 {
   "mcpServers": {
     "yandex-wordstat": {
-      "command": "python",
-      "args": ["-m", "wordstat_mcp"],
-      "cwd": "/absolute/path/to/yandex-wordstat-mcp",
+      "command": "uvx",
+      "args": [
+        "--from",
+        "git+https://github.com/baltic-tea/yandex-wordstat-mcp.git",
+        "wordstat-mcp"
+      ],
       "env": {
         "WORDSTAT_FOLDER_ID": "your-folder-id",
         "WORDSTAT_API_KEY": "your-api-key"
@@ -181,7 +263,8 @@ The examples below use the local stdio launch pattern:
 }
 ```
 
-Replace `python` with your explicit interpreter path if needed.
+For development from a clone, use `wordstat-mcp` from the activated virtual
+environment or `uv run wordstat-mcp` inside the repository.
 
 Clients that support this `mcpServers` JSON shape directly or with only location-specific changes: Claude Desktop, Claude Code, Windsurf, Qwen Codem, Kilo Code, Trae.
 
@@ -195,7 +278,7 @@ Recommended project-scoped setup:
 claude mcp add yandex-wordstat --scope project --transport stdio \
   --env WORDSTAT_FOLDER_ID=your-folder-id \
   --env WORDSTAT_API_KEY=your-api-key \
-  -- python -m wordstat_mcp
+  -- uvx --from git+https://github.com/baltic-tea/yandex-wordstat-mcp.git wordstat-mcp
 ```
 
 Verify:
@@ -212,7 +295,7 @@ If you prefer a committed project config, create `.mcp.json` in the project root
 Claude Code also supports importing a JSON server definition:
 
 ```bash
-claude mcp add-json yandex-wordstat '{"type":"stdio","command":"python","args":["-m","wordstat_mcp"],"cwd":"/absolute/path/to/yandex-wordstat-mcp","env":{"WORDSTAT_FOLDER_ID":"your-folder-id","WORDSTAT_API_KEY":"your-api-key"}}'
+claude mcp add-json yandex-wordstat '{"type":"stdio","command":"uvx","args":["--from","git+https://github.com/baltic-tea/yandex-wordstat-mcp.git","wordstat-mcp"],"env":{"WORDSTAT_FOLDER_ID":"your-folder-id","WORDSTAT_API_KEY":"your-api-key"}}'
 ```
 
 ### Codex
@@ -223,7 +306,7 @@ the `mcpServers` JSON object directly; use the CLI or TOML config.
 CLI example:
 
 ```bash
-codex mcp add yandex_wordstat_mcp --command python -- -m wordstat_mcp
+codex mcp add yandex_wordstat_mcp --command uvx -- --from git+https://github.com/baltic-tea/yandex-wordstat-mcp.git wordstat-mcp
 codex mcp list
 ```
 
@@ -231,9 +314,8 @@ If you prefer editing config directly, edit the file `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.yandex_wordstat_mcp]
-command = "python"
-args = ["-m", "wordstat_mcp"]
-cwd = "/absolute/path/to/yandex-wordstat-mcp"
+command = "uvx"
+args = ["--from", "git+https://github.com/baltic-tea/yandex-wordstat-mcp.git", "wordstat-mcp"]
 
 [mcp_servers.yandex_wordstat_mcp.env]
 WORDSTAT_FOLDER_ID = "your-folder-id"

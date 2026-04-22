@@ -23,8 +23,9 @@ the returned `phrase` in `getTop`, `getDynamics`, or `getRegionsDistribution`.
 Important: MCP prompts and resources cannot force a consuming LLM to follow
 them. They are discoverable context provided by the server. Hard requirements
 must be enforced in server tools. This server therefore rejects unsupported
-operators in `getDynamics` and returns warnings from `build_wordstat_phrase`
-when requested operators are not compatible with the target method.
+operators in `getDynamics` and returns machine-readable warning codes from
+`build_wordstat_phrase` when requested operators are not compatible with the
+target method.
 
 ## Supported Operators
 
@@ -43,9 +44,21 @@ Wordstat supports the operators `!`, `+`, `" "`, `[]`, `()`, and `|`. Operators 
 - `getTop`: all operators can be used. Use this method for popular queries, related keywords, and phrase expansion.
 - `getRegionsDistribution`: all operators can be used. Use this method to compare demand by regions or cities.
 - `getDynamics`: use only the `+` operator. Wordstat dynamics supports only forced inclusion of stop words.
-- `getRegionsTree`, `update_regions_tree`, `wordstat_env_health`: these tools do not accept search phrases and do not need operators.
+- `find_regions`, `getRegionsTree`, `update_regions_tree`, `wordstat_env_health`: these tools do not accept search phrases and do not need operators. Use `find_regions` for user-provided city or region names; use `getRegionsTree` only for bulk/debug region index lookup.
 
-If the user asks for dynamics for an exact phrase, fixed word order, fixed word forms, or grouped alternatives, do not add `" "`, `[]`, `!`, `()`, or `|` to `phrase` for `getDynamics`. Explain the limitation and use either a plain phrase or only `+` for meaningful stop words.
+If the user asks for dynamics for an exact phrase, fixed word order, fixed word forms, or grouped alternatives, do not add `" "`, `[]`, `!`, `()`, or `|` to `phrase` for `getDynamics`. Keep this compatibility detail internal unless the user asks about query syntax, exactness, or why the phrase changed. Use either a plain phrase or only `+` for meaningful stop words.
+
+## Warning Codes
+
+`build_wordstat_phrase` returns warning codes for agent control flow. Do not
+quote or explain these codes to the user during normal keyword, dynamics, or
+region-analysis flows.
+
+| Code | Meaning | Default user-facing behavior |
+| --- | --- | --- |
+| `BASE_PHRASE_INFERRED` | `base_phrase` was inferred from `natural_query` by simple server-side heuristics. | Keep internal unless the inferred phrase looks wrong or `needs_review` is true. |
+| `DYNAMICS_OPERATOR_LIMIT` | Requested exact-count, fixed-order, or fixed-form operators were omitted for `getDynamics`. | Keep internal unless the user asks about exactness or query syntax. |
+| `DYNAMICS_OPERATORS_STRIPPED` | Unsupported operators were removed from a `getDynamics` phrase. | Keep internal unless the removed operators materially change interpretation. |
 
 ## Operator Selection Algorithm
 
@@ -191,20 +204,23 @@ Before calling an MCP tool, check:
 - `phrase` is not empty.
 - `phrase` is not longer than 400 characters.
 - For `getDynamics`, `phrase` contains no operators except `+`.
-- Regional words do not replace the `regions` parameter when the user explicitly means a geographic filter. For example, for "в Москве", use `regions` if the region ID is known instead of adding `москва` to `phrase`.
+- Regional words do not replace the `regions` parameter when the user explicitly means a geographic filter. For example, for "в Москве", call `find_regions` first and use returned `regions` IDs instead of adding `москва` to `phrase`.
 - If the user needs separate statistics for several phrases, pass several items in `phrases` instead of one phrase with `|`.
 - If the user needs combined statistics for alternatives, `()` and `|` can be used.
 
 ## User-Facing Response Guidance
 
-When an operator changes query semantics, briefly state which phrase you are sending:
+When an operator change materially affects user interpretation, briefly state
+which phrase you are sending. Otherwise keep operator-normalization details
+internal and focus on the returned data.
 
 ```text
 Using phrase: "работа +из дома" so Wordstat includes the preposition "из".
 ```
 
-If the user asks for an unsupported operator combination for dynamics, answer directly:
+For unsupported operator combinations in dynamics, usually omit the limitation
+from the final answer. Mention it only when the user asks about query syntax,
+exactness, or why the phrase changed.
 
-```text
-Wordstat dynamics supports only the + operator. Sending phrase: "купить авто" without quotation marks.
-```
+Only mention dynamics operator limits when explicitly asked about exactness or syntax.
+
