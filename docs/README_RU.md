@@ -214,22 +214,13 @@ podman run --rm -i \
 
 `find_regions` читает кешированный индекс `getRegionsTree`, поэтому повторные
 поиски локальные после первого заполнения кеша. Для большого списка городов
-агент может один раз вызвать `get_region_index` и брать точные совпадения из
+агент может один раз вызвать `getRegionsTree` и брать точные совпадения из
 `by_name`; отдельный batch-инструмент обычно не окупает расширение API.
 
 ### `update_regions_tree`
 
 Обновляет `.saved/regions_tree.json` из API, даже если кешированный справочник
 уже существует.
-
-### AI-first алиасы
-
-Эти инструменты дают то же поведение через task-oriented названия:
-
-- `find_keyword_queries` делегирует в `getTop`.
-- `get_query_demand_trends` делегирует в `getDynamics`.
-- `compare_query_demand_by_region` делегирует в `getRegionsDistribution`.
-- `get_region_index` делегирует в `getRegionsTree`.
 
 ### `wordstat_env_health`
 

@@ -23,12 +23,7 @@ from wordstat_mcp.helpers import (
     wordstat_settings,
 )
 from wordstat_mcp.healthcheck import mcp_healthcheck
-from wordstat_mcp.metadata import (
-    SERVER_DESCRIPTION,
-    SERVER_DOCUMENTATION_URL,
-    SERVER_NAME,
-    get_server_version,
-)
+from wordstat_mcp.metadata import McpServerMetadata
 from wordstat_mcp.models import (
     GetDynamicsResponse,
     GetDynamicsRequest,
@@ -54,12 +49,7 @@ from wordstat_mcp.operators import (
 )
 
 
-mcp = FastMCP(
-    name=SERVER_NAME,
-    version=get_server_version(),
-    instructions=SERVER_DESCRIPTION,
-    website_url=SERVER_DOCUMENTATION_URL,
-)
+mcp = FastMCP(**McpServerMetadata().model_dump())
 
 
 @mcp.resource(
@@ -99,28 +89,35 @@ async def build_wordstat_phrase(
         str,
         Field(
             description=(
-                "User's natural-language keyword request, e.g. exact phrase "
+                "User's keyword intent and matching rules, e.g. exact phrase "
                 "купить авто (buy a car)."
             )
         ),
     ],
     target_method: Annotated[
         WordstatSearchMethod,
-        Field(description="Target Wordstat tool that will receive the phrase."),
+        Field(
+            description=(
+                "Target tool for the generated phrase; used to enforce "
+                "Wordstat operator compatibility."
+            )
+        ),
     ],
     base_phrase: Annotated[
         str | None,
         Field(
             description=(
-                "Optional plain base phrase to transform, e.g. купить авто (buy a car)."
+                "Optional plain phrase to transform, e.g. купить авто (buy a car)."
             )
         ),
     ] = None,
     exact_word_count: Annotated[
-        bool, Field(description="Use exact-word-count semantics when possible.")
+        bool,
+        Field(description="Request exact word-count semantics when compatible."),
     ] = False,
     fixed_word_order: Annotated[
-        bool, Field(description="Use fixed word-order semantics when possible.")
+        bool,
+        Field(description="Request fixed word-order semantics when compatible."),
     ] = False,
     alternatives: Annotated[
         list[str] | None,
@@ -133,15 +130,11 @@ async def build_wordstat_phrase(
     ] = None,
     fixed_forms: Annotated[
         list[str] | None,
-        Field(description=("Words that should keep exact forms, e.g. авто (car).")),
+        Field(description="Words to keep in exact forms, e.g. авто (car)."),
     ] = None,
     required_stop_words: Annotated[
         list[str] | None,
-        Field(
-            description=(
-                "Stop words that should be forced with +, e.g. из (from), в (in)."
-            )
-        ),
+        Field(description="Stop words to force with `+`, e.g. из (from), в (in)."),
     ] = None,
 ) -> dict[str, Any]:
     """Build a valid Wordstat phrase with structured warning codes."""
@@ -172,10 +165,9 @@ async def get_top(
         list[str],
         Field(
             description=(
-                "One or more Wordstat phrases. Use build_wordstat_phrase first when "
-                "the user describes exact phrase, word order, forms, alternatives, "
-                "or required stop words in natural language. Russian phrases are "
-                "the main case, e.g. купить авто (buy a car)."
+                "Final Wordstat phrases, e.g. купить авто (buy a car). Use "
+                "build_wordstat_phrase first for exactness, fixed order, forms, "
+                "alternatives, or required stop words."
             )
         ),
     ],
@@ -184,26 +176,25 @@ async def get_top(
         Field(
             ge=1,
             le=2000,
-            description="Number of top Wordstat phrases to request per input phrase.",
+            description="Top Wordstat phrases to request per input phrase.",
         ),
     ] = 50,
     regions: Annotated[
         list[int | str] | None,
         Field(
             description=(
-                "Yandex region IDs as positive numbers or numeric strings. Use "
-                "find_regions before passing regions from user place names, e.g. "
+                "Yandex Wordstat region IDs. Use find_regions for names, e.g. "
                 "Moscow (Москва)."
             )
         ),
     ] = None,
     devices: Annotated[
         list[WordstatDevices] | None,
-        Field(description="Optional device filters: all, desktop, phone, or tablet."),
+        Field(description="Device filters; omit for all devices."),
     ] = None,
-    page: Annotated[int, Field(ge=1, description="1-based response page.")] = 1,
+    page: Annotated[int, Field(ge=1, description="1-based result page.")] = 1,
     pageSize: Annotated[
-        int, Field(ge=1, description="Number of phrase-level items per page.")
+        int, Field(ge=1, description="Phrase-level items per response page.")
     ] = 50,
 ) -> GetTopResponse:
     """Get top and associated phrases for one or many input phrases."""
@@ -257,16 +248,14 @@ async def get_dynamics(
         list[str],
         Field(
             description=(
-                "One or more Wordstat phrases. Use build_wordstat_phrase first when "
-                "the user describes exact phrase, word order, forms, alternatives, "
-                "or required stop words in natural language. Russian phrases are "
-                "the main case, e.g. купить авто (buy a car)."
+                "Final Wordstat phrases, e.g. купить авто (buy a car). Use "
+                "build_wordstat_phrase first for exactness or operators."
             )
         ),
     ],
     fromDate: Annotated[
         str | datetime,
-        Field(description="Required RFC3339 start date, e.g. 2026-04-09T00:00:00Z."),
+        Field(description="RFC3339 start date, e.g. 2026-04-09T00:00:00Z."),
     ],
     period: Annotated[
         WordstatPeriods,
@@ -274,25 +263,19 @@ async def get_dynamics(
     ] = "PERIOD_MONTHLY",
     toDate: Annotated[
         datetime | str | None,
-        Field(description="Optional RFC3339 end date. Defaults to current UTC time."),
+        Field(description="Optional RFC3339 end date; defaults to current UTC time."),
     ] = None,
     regions: Annotated[
         list[int | str] | None,
-        Field(
-            description=(
-                "Yandex region IDs as positive numbers or numeric strings. Use "
-                "find_regions before passing regions from user place names, e.g. "
-                "Moscow (Москва)."
-            )
-        ),
+        Field(description="Yandex Wordstat region IDs; use find_regions for names."),
     ] = None,
     devices: Annotated[
         list[WordstatDevices] | None,
-        Field(description="Optional device filters: all, desktop, phone, or tablet."),
+        Field(description="Device filters; omit for all devices."),
     ] = None,
-    page: Annotated[int, Field(ge=1, description="1-based response page.")] = 1,
+    page: Annotated[int, Field(ge=1, description="1-based result page.")] = 1,
     pageSize: Annotated[
-        int, Field(ge=1, description="Number of phrase-level items per page.")
+        int, Field(ge=1, description="Phrase-level items per response page.")
     ] = 50,
 ) -> GetDynamicsResponse:
     """Get query demand dynamics for one or many phrases."""
@@ -352,10 +335,8 @@ async def get_regions_distribution(
         list[str],
         Field(
             description=(
-                "One or more Wordstat phrases. Use build_wordstat_phrase first when "
-                "the user describes exact phrase, word order, forms, alternatives, "
-                "or required stop words in natural language. Russian phrases are "
-                "the main case, e.g. купить авто (buy a car)."
+                "Final Wordstat phrases, e.g. купить авто (buy a car). Use "
+                "build_wordstat_phrase first for exactness or operators."
             )
         ),
     ],
@@ -365,11 +346,11 @@ async def get_regions_distribution(
     ] = "REGION_ALL",
     devices: Annotated[
         list[WordstatDevices] | None,
-        Field(description="Optional device filters: all, desktop, phone, or tablet."),
+        Field(description="Device filters; omit for all devices."),
     ] = None,
-    page: Annotated[int, Field(ge=1, description="1-based response page.")] = 1,
+    page: Annotated[int, Field(ge=1, description="1-based result page.")] = 1,
     pageSize: Annotated[
-        int, Field(ge=1, description="Number of phrase-level items per page.")
+        int, Field(ge=1, description="Phrase-level items per response page.")
     ] = 50,
 ) -> GetRegionsDistributionResponse:
     """Get region distribution for one or many phrases."""
@@ -445,18 +426,11 @@ async def get_regions_tree() -> RegionIndexResponse:
 async def find_regions(
     query: Annotated[
         str,
-        Field(
-            description=(
-                "Region name or substring to find, e.g. Moscow (Москва) "
-                "or Troitsk (Троицк)."
-            )
-        ),
+        Field(description="Region name or substring, e.g. Москва or Troitsk (Троицк)."),
     ],
     limit: Annotated[
         int,
-        Field(
-            ge=1, le=50, description="Maximum number of region candidates to return."
-        ),
+        Field(ge=1, le=50, description="Maximum region candidates to return."),
     ] = 10,
 ) -> RegionSearchResponse:
     """Find region IDs by lowercase exact lookup and substring fallback."""
@@ -499,168 +473,6 @@ async def update_regions_tree() -> RegionIndexResponse:
             return cast(RegionIndexResponse, response)
     except (ValueError, WordstatError) as e:
         raise to_tool_error(e, operation="update_regions_tree") from e
-
-
-@mcp.tool(
-    name="find_keyword_queries",
-    description=descriptions.FIND_KEYWORD_QUERIES,
-    annotations=tool_annotations("Find Keyword Queries"),
-)
-async def find_keyword_queries(
-    phrases: Annotated[
-        list[str],
-        Field(
-            description=(
-                "One or more Wordstat phrases. Use build_wordstat_phrase first when "
-                "the user describes exact phrase, word order, forms, alternatives, "
-                "or required stop words in natural language. Russian phrases are "
-                "the main case, e.g. купить авто (buy a car)."
-            )
-        ),
-    ],
-    numPhrases: Annotated[
-        int,
-        Field(ge=1, le=2000, description="Number of top phrases per input phrase."),
-    ] = 50,
-    regions: Annotated[
-        list[int | str] | None,
-        Field(
-            description=(
-                "Yandex region IDs as positive numbers or numeric strings. Use "
-                "find_regions before passing regions from user place names, e.g. "
-                "Moscow (Москва)."
-            )
-        ),
-    ] = None,
-    devices: Annotated[
-        list[WordstatDevices] | None,
-        Field(description="Optional device filters: all, desktop, phone, or tablet."),
-    ] = None,
-    page: Annotated[int, Field(ge=1, description="1-based response page.")] = 1,
-    pageSize: Annotated[
-        int, Field(ge=1, description="Number of phrase-level items per page.")
-    ] = 50,
-) -> GetTopResponse:
-    """AI-first alias for getTop."""
-    return await get_top(
-        phrases=phrases,
-        numPhrases=numPhrases,
-        regions=regions,
-        devices=devices,
-        page=page,
-        pageSize=pageSize,
-    )
-
-
-@mcp.tool(
-    name="get_query_demand_trends",
-    description=descriptions.GET_QUERY_DEMAND_TRENDS,
-    annotations=tool_annotations("Get Query Demand Trends"),
-)
-async def get_query_demand_trends(
-    phrases: Annotated[
-        list[str],
-        Field(
-            description=(
-                "One or more Wordstat phrases. Use build_wordstat_phrase first when "
-                "the user describes exact phrase, word order, forms, alternatives, "
-                "or required stop words in natural language. Russian phrases are "
-                "the main case, e.g. купить авто (buy a car)."
-            )
-        ),
-    ],
-    fromDate: Annotated[
-        str | datetime,
-        Field(description="Required RFC3339 start date, e.g. 2026-04-09T00:00:00Z."),
-    ],
-    period: Annotated[
-        WordstatPeriods,
-        Field(description="Aggregation period: daily, weekly, or monthly."),
-    ] = "PERIOD_MONTHLY",
-    toDate: Annotated[
-        datetime | str | None,
-        Field(description="Optional RFC3339 end date. Defaults to current UTC time."),
-    ] = None,
-    regions: Annotated[
-        list[int | str] | None,
-        Field(
-            description=(
-                "Yandex region IDs as positive numbers or numeric strings. Use "
-                "find_regions before passing regions from user place names, e.g. "
-                "Moscow (Москва)."
-            )
-        ),
-    ] = None,
-    devices: Annotated[
-        list[WordstatDevices] | None,
-        Field(description="Optional device filters: all, desktop, phone, or tablet."),
-    ] = None,
-    page: Annotated[int, Field(ge=1, description="1-based response page.")] = 1,
-    pageSize: Annotated[
-        int, Field(ge=1, description="Number of phrase-level items per page.")
-    ] = 50,
-) -> GetDynamicsResponse:
-    """AI-first alias for getDynamics."""
-    return await get_dynamics(
-        phrases=phrases,
-        fromDate=fromDate,
-        period=period,
-        toDate=toDate,
-        regions=regions,
-        devices=devices,
-        page=page,
-        pageSize=pageSize,
-    )
-
-
-@mcp.tool(
-    name="compare_query_demand_by_region",
-    description=descriptions.COMPARE_QUERY_DEMAND_BY_REGION,
-    annotations=tool_annotations("Compare Query Demand By Region"),
-)
-async def compare_query_demand_by_region(
-    phrases: Annotated[
-        list[str],
-        Field(
-            description=(
-                "One or more Wordstat phrases. Use build_wordstat_phrase first when "
-                "the user describes exact phrase, word order, forms, alternatives, "
-                "or required stop words in natural language. Russian phrases are "
-                "the main case, e.g. купить авто (buy a car)."
-            )
-        ),
-    ],
-    region: Annotated[
-        WordstatRegionModes,
-        Field(description="Distribution mode: all, regions, or cities."),
-    ] = "REGION_ALL",
-    devices: Annotated[
-        list[WordstatDevices] | None,
-        Field(description="Optional device filters: all, desktop, phone, or tablet."),
-    ] = None,
-    page: Annotated[int, Field(ge=1, description="1-based response page.")] = 1,
-    pageSize: Annotated[
-        int, Field(ge=1, description="Number of phrase-level items per page.")
-    ] = 50,
-) -> GetRegionsDistributionResponse:
-    """AI-first alias for getRegionsDistribution."""
-    return await get_regions_distribution(
-        phrases=phrases,
-        region=region,
-        devices=devices,
-        page=page,
-        pageSize=pageSize,
-    )
-
-
-@mcp.tool(
-    name="get_region_index",
-    description=descriptions.GET_REGION_INDEX,
-    annotations=tool_annotations("Get Region Index"),
-)
-async def get_region_index() -> RegionIndexResponse:
-    """AI-first alias for getRegionsTree."""
-    return await get_regions_tree()
 
 
 @mcp.tool(

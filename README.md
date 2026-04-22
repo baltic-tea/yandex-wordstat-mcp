@@ -212,22 +212,13 @@ parameter of `getTop` or `getDynamics`.
 
 `find_regions` reads the cached `getRegionsTree` index, so repeated lookups are
 local after the first cache fill. For many city names in one task, agents can
-call `get_region_index` once and resolve exact matches from `by_name`; a
+call `getRegionsTree` once and resolve exact matches from `by_name`; a
 separate batch lookup tool is usually not worth the extra API surface.
 
 ### `update_regions_tree`
 
 Refreshes `.saved/regions_tree.json` from the API even when a cached lookup
 already exists.
-
-### AI-first aliases
-
-These tools expose the same behavior with task-oriented names:
-
-- `find_keyword_queries` delegates to `getTop`.
-- `get_query_demand_trends` delegates to `getDynamics`.
-- `compare_query_demand_by_region` delegates to `getRegionsDistribution`.
-- `get_region_index` delegates to `getRegionsTree`.
 
 ### `wordstat_env_health`
 

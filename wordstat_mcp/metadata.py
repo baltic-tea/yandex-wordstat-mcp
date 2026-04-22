@@ -1,16 +1,24 @@
-"""Server metadata constants."""
+"""Server metadata model."""
 
 from __future__ import annotations
 
-
-SERVER_NAME = "Yandex Wordstat MCP Server"
-SERVER_DESCRIPTION = "MCP server for Yandex Wordstat API v2"
-SERVER_VERSION = "0.1.1"
-SERVER_SOURCE_URL = "https://github.com/baltic-tea/yandex-wordstat-mcp-test"
-SERVER_DOCUMENTATION_URL = f"{SERVER_SOURCE_URL}#readme"
+from pydantic import BaseModel, ConfigDict, Field
 
 
-def get_server_version() -> str:
-    """Return server version."""
+class McpServerMetadata(BaseModel):
+    """Metadata accepted by FastMCP server construction."""
 
-    return SERVER_VERSION
+    model_config = ConfigDict(frozen=True, str_strip_whitespace=True)
+
+    name: str = Field(default="Yandex Wordstat MCP Server")
+    version: str = Field(default="0.1.1")
+    instructions: str = Field(
+        default=(
+            "Supported Yandex Wordstat API methods: Wordstat.GetTop, "
+            "Wordstat.GetDynamics, Wordstat.GetRegionsDistribution, "
+            "Wordstat.GetRegionsTree."
+        )
+    )
+    website_url: str = Field(
+        default="https://github.com/baltic-tea/yandex-wordstat-mcp-test"
+    )

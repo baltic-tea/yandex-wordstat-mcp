@@ -23,11 +23,7 @@ from wordstat_mcp.helpers import (
 from wordstat_mcp.operators import WORDSTAT_OPERATORS_AGENT_GUIDE
 from wordstat_mcp.server import (
     build_wordstat_phrase,
-    compare_query_demand_by_region,
-    find_keyword_queries,
     find_regions,
-    get_query_demand_trends,
-    get_region_index,
     get_dynamics,
     get_regions_distribution,
     get_regions_tree,
@@ -212,23 +208,6 @@ async def test_get_regions_distribution_posts_phrase_payload(
     ]
 
 
-@pytest.mark.anyio
-async def test_ai_first_aliases_delegate_to_api_tools(
-    patched_tool_dependencies: list[FakeWordstatClient],
-) -> None:
-    await find_keyword_queries(phrases=["python"], numPhrases=5)
-    await get_query_demand_trends(
-        phrases=["python"], fromDate="2026-01-01T00:00:00Z"
-    )
-    await compare_query_demand_by_region(phrases=["python"], region="REGION_CITIES")
-
-    assert [client.calls[0][0] for client in patched_tool_dependencies] == [
-        "topRequests",
-        "dynamics",
-        "regions",
-    ]
-
-
 def test_tool_function_parameters_keep_raw_api_names() -> None:
     assert "numPhrases" in inspect.signature(get_top).parameters
     assert "pageSize" in inspect.signature(get_top).parameters
@@ -312,20 +291,20 @@ async def test_public_mcp_tool_names_match_documented_api_names() -> None:
 
     assert {
         "build_wordstat_phrase",
-        "compare_query_demand_by_region",
-        "find_keyword_queries",
         "find_regions",
         "getTop",
         "getDynamics",
         "getRegionsDistribution",
         "getRegionsTree",
-        "get_query_demand_trends",
-        "get_region_index",
         "update_regions_tree",
         "wordstat_env_health",
     } <= tools
     assert "get_top" not in tools
     assert "get_dynamics" not in tools
+    assert "find_keyword_queries" not in tools
+    assert "get_query_demand_trends" not in tools
+    assert "compare_query_demand_by_region" not in tools
+    assert "get_region_index" not in tools
 
 
 @pytest.mark.anyio
@@ -340,15 +319,11 @@ async def test_public_mcp_tool_open_world_hints_match_side_effects() -> None:
     assert health_annotations.openWorldHint is False
 
     for name in {
-        "compare_query_demand_by_region",
-        "find_keyword_queries",
         "find_regions",
         "getTop",
         "getDynamics",
         "getRegionsDistribution",
         "getRegionsTree",
-        "get_query_demand_trends",
-        "get_region_index",
         "update_regions_tree",
     }:
         annotations = tools[name].annotations
@@ -376,14 +351,6 @@ async def test_public_mcp_tool_descriptions_include_wordstat_api_methods() -> No
         "<api>method=Wordstat.GetRegionsTree; endpoint=getRegionsTree</api>"
         in (tools["getRegionsTree"].description or "")
     )
-    assert (
-        "<api>method=Wordstat.GetTop; endpoint=topRequests</api>"
-        in (tools["find_keyword_queries"].description or "")
-    )
-    assert (
-        "<api>method=Wordstat.GetDynamics; endpoint=dynamics</api>"
-        in (tools["get_query_demand_trends"].description or "")
-    )
     health_description = tools["wordstat_env_health"].description or ""
     assert "Use only for troubleshooting" in health_description
     assert "does not call the external Wordstat API" in health_description
@@ -394,12 +361,9 @@ async def test_public_mcp_api_tools_have_structured_output_schemas() -> None:
     tools = {tool.name: tool for tool in await mcp.list_tools()}
 
     expected_item_fields = {
-        "compare_query_demand_by_region": "distribution",
-        "find_keyword_queries": "top",
         "getTop": "top",
         "getDynamics": "dynamics",
         "getRegionsDistribution": "distribution",
-        "get_query_demand_trends": "dynamics",
     }
 
     for tool_name, item_field in expected_item_fields.items():
@@ -570,22 +534,6 @@ async def test_find_regions_uses_cached_index_and_returns_duplicate_names(
     assert response["total"] == 2
     assert [match["id"] for match in response["matches"]] == ["1", "2"]
     assert all(match["matchType"] == "exact" for match in response["matches"])
-
-
-@pytest.mark.anyio
-async def test_get_region_index_alias_returns_cached_index(
-    workspace_tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    cache_path = workspace_tmp_path / ".saved" / "regions_tree.json"
-    save_regions_tree_cache(
-        {"regions": [{"id": "216", "name": "Зеленоград"}]}, cache_path
-    )
-    monkeypatch.chdir(workspace_tmp_path)
-
-    response = await get_region_index()
-
-    assert response["by_name"]["зеленоград"] == ["216"]
 
 
 def test_regions_tree_cache_loads_legacy_tree_as_index(workspace_tmp_path: Path) -> None:
