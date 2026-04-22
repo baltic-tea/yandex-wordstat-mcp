@@ -1,9 +1,9 @@
 from __future__ import annotations
-from typing_extensions import Self
-import numbers
+from numbers import Integral
 
-from datetime import datetime, UTC
-from typing import Any, Literal
+from datetime import datetime, UTC, timedelta
+from typing import Any, Literal, Self
+from typing_extensions import NotRequired, TypedDict
 
 from pydantic import (
     BaseModel,
@@ -19,6 +19,121 @@ WordstatDevices = Literal[
 ]
 WordstatPeriods = Literal["PERIOD_DAILY", "PERIOD_WEEKLY", "PERIOD_MONTHLY"]
 WordstatRegionModes = Literal["REGION_ALL", "REGION_REGIONS", "REGION_CITIES"]
+
+
+# -----------------------------------------------------------------------------
+# Tool response models (for structured tool output parsing).
+# -----------------------------------------------------------------------------
+class RegionIndexResponse(TypedDict):
+    by_name: dict[str, list[str]]
+    by_id: dict[str, dict[str, Any]]
+    message: NotRequired[str]
+    next_action: NotRequired[str]
+
+
+class RegionMatch(TypedDict):
+    id: str
+    name: str
+    path: list[str]
+    matchType: str
+
+
+class RegionSearchResponse(TypedDict):
+    query: str
+    matches: list[RegionMatch]
+    total: int
+    message: str
+    next_action: str
+
+
+class PaginatedResponseBase(TypedDict):
+    page: int
+    pageSize: int
+    total: int
+    totalPages: int
+    hasNextPage: bool
+    hasPreviousPage: bool
+    message: str
+    next_action: str
+    warnings: NotRequired[list[str]]
+
+
+class TopQueryItem(TypedDict):
+    phrase: str
+    top: dict[str, Any]
+
+
+class GetTopResponse(PaginatedResponseBase):
+    items: list[TopQueryItem]
+
+
+class DynamicsQueryItem(TypedDict):
+    phrase: str
+    dynamics: dict[str, Any]
+
+
+class GetDynamicsResponse(PaginatedResponseBase):
+    items: list[DynamicsQueryItem]
+
+
+class RegionsDistributionQueryItem(TypedDict):
+    phrase: str
+    distribution: dict[str, Any]
+
+
+class GetRegionsDistributionResponse(PaginatedResponseBase):
+    items: list[RegionsDistributionQueryItem]
+
+
+# -----------------------------------------------------------------------------
+# API request models (for Wordstat API interactions).
+# -----------------------------------------------------------------------------
+def ensure_utc(value: datetime) -> datetime:
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def start_of_day(value: datetime) -> datetime:
+    return value.replace(hour=0, minute=0, second=0, microsecond=0)
+
+
+def end_of_day(value: datetime) -> datetime:
+    return value.replace(hour=23, minute=59, second=59, microsecond=999999)
+
+
+def fix_date_range(
+    period: WordstatPeriods | str,
+    from_date: datetime | None,
+    to_date: datetime | None = None,
+    enable_period_rules: bool = True,
+) -> tuple[datetime, datetime]:
+    """Fix raw dates to a Wordstat-compatible range."""
+
+    if from_date is None:
+        raise ValueError("from_date is required.")
+
+    _from = from_date
+    _to = to_date if to_date else datetime.now(UTC)
+
+    if ensure_utc(_from) > ensure_utc(_to):
+        _from, _to = _to, _from
+
+    if enable_period_rules:
+        match period:
+            case "PERIOD_MONTHLY":
+                _from = _from.replace(day=1)
+                next_month = (_to.replace(day=28) + timedelta(days=4)).replace(day=1)
+                _to = next_month - timedelta(days=1)
+            case "PERIOD_WEEKLY":
+                _from = _from - timedelta(days=_from.weekday())
+                _to = _to - timedelta(days=_to.weekday()) + timedelta(days=6)
+            case "PERIOD_DAILY":
+                pass
+            case _:
+                raise ValueError(f"Unsupported period: {period}")
+
+    return start_of_day(_from), end_of_day(_to)
 
 
 class CustomModel(BaseModel):
@@ -44,10 +159,18 @@ class RegionsDevicesModel(PhraseModel):
 
         result = []
         for rid in value:
-            if isinstance(rid, numbers.Integral):
+            if isinstance(rid, bool):
+                raise ValueError(f"Region ID must be numeric: {rid}")
+            elif isinstance(rid, Integral):
+                if rid <= 0:
+                    raise ValueError(f"Region ID must be positive: {rid}")
                 result.append(str(rid))
-            elif isinstance(rid, str) and rid.isdigit():
-                result.append(rid)
+            elif isinstance(rid, str):
+                rid = rid.strip()
+                if rid.isdecimal() and int(rid) > 0:
+                    result.append(rid)
+                else:
+                    raise ValueError(f"Region ID must be positive numeric: {rid}")
             else:
                 raise ValueError(f"Region ID must be numeric: {rid}")
         return result
@@ -69,9 +192,7 @@ class GetTopRequest(RegionsDevicesModel):
 class GetDynamicsRequest(RegionsDevicesModel):
     period: WordstatPeriods = "PERIOD_MONTHLY"
     from_date: datetime = Field(alias="fromDate")
-    to_date: datetime | None = Field(
-        default_factory=lambda: datetime.now(UTC), alias="toDate"
-    )
+    to_date: datetime | None = Field(default=None, alias="toDate")
 
     @field_validator("to_date", mode="before")
     @classmethod
@@ -81,20 +202,19 @@ class GetDynamicsRequest(RegionsDevicesModel):
         return value
 
     @model_validator(mode="after")
-    def validate_date_range(self) -> Self:
-        if self.to_date is None:
-            return self
-        if self.from_date > self.to_date:
-            return self.model_copy(
-                update={"from_date": self.to_date, "to_date": self.from_date}
-            )
+    def validate_and_fix_date_range(self) -> Self:
+        self.from_date, self.to_date = fix_date_range(
+            period=self.period,
+            from_date=self.from_date,
+            to_date=self.to_date,
+        )
         return self
 
     @field_serializer("from_date", "to_date")
-    def serialize_dt(self, value: datetime) -> str:
-        if value.tzinfo is None:
-            value = value.replace(tzinfo=UTC)
-        return value.astimezone(UTC).isoformat().replace("+00:00", "Z")
+    def serialize_dates(self, value: datetime | None) -> str | None:
+        if value is None:
+            return None
+        return ensure_utc(value).isoformat().replace("+00:00", "Z")
 
 
 class GetRegionsDistributionRequest(PhraseModel):
