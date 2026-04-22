@@ -7,6 +7,7 @@ import pytest
 from dotenv import dotenv_values
 
 from wordstat_mcp.tools import (
+    find_regions,
     wordstat_env_health,
     get_dynamics,
     get_regions_distribution,
@@ -75,9 +76,12 @@ async def test_live_wordstat_smoke_suite(monkeypatch: pytest.MonkeyPatch) -> Non
         pageSize=1,
     )
     tree = await get_regions_tree()
+    regions = await find_regions("Москва", limit=1)
 
     assert health["status"] == "ok"
     assert top["total"] >= 1
     assert dynamics["total"] >= 1
     assert distribution["total"] >= 1
-    assert tree["regions"]
+    assert tree
+    assert regions["total"] >= 1
+    assert regions["matches"][0]["id"]
