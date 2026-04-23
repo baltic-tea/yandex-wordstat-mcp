@@ -1,3 +1,16 @@
+# Stage 1: Build the MCP server
+# ----------------------
+FROM ghcr.io/astral-sh/uv:0.11-python3.14-trixie-slim AS builder
+
+WORKDIR /mcp
+
+COPY pyproject.toml uv.lock README.md ./
+COPY wordstat_mcp ./wordstat_mcp
+
+RUN uv sync --frozen --no-dev
+
+# Stage 2: Run the MCP server
+# --------------------
 FROM python:3.14-slim
 
 LABEL org.opencontainers.image.title="Yandex Wordstat MCP Server"
@@ -11,14 +24,19 @@ LABEL org.opencontainers.image.vendor="baltic-tea"
 LABEL org.opencontainers.image.base.name="python:3.14-slim"
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PATH="/mcp/.venv/bin:$PATH"
 
-WORKDIR /app
+WORKDIR /mcp
 
-COPY pyproject.toml README.md ./
-COPY wordstat_mcp ./wordstat_mcp
+RUN groupadd --system mcpgroup && \
+    useradd --system --create-home --gid mcpgroup mcpuser && \
+    chown mcpuser:mcpgroup /mcp
 
-RUN pip install --no-cache-dir .
+COPY --from=builder --chown=mcpuser:mcpgroup /mcp/.venv /mcp/.venv
+COPY --chown=mcpuser:mcpgroup wordstat_mcp ./wordstat_mcp
+
+USER mcpuser
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
     CMD python -m wordstat_mcp.healthcheck

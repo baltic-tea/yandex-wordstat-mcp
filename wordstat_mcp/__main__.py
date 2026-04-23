@@ -8,7 +8,7 @@ from wordstat_mcp.api_settings import WordstatSettings
 from wordstat_mcp.server import mcp
 
 
-def main() -> None:
+def start_server() -> None:
     """Run MCP server."""
 
     logging.basicConfig(
@@ -21,4 +21,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    start_server()

@@ -13,7 +13,7 @@ dependencies = [
 ]
 
 [project.scripts]
-wordstat-mcp = "wordstat_mcp.__main__:main"
+wordstat-mcp = "wordstat_mcp.__main__:start_server"
 
 [build-system]
 requires = ["hatchling>=1.25.0"]
@@ -30,7 +30,6 @@ dev = [
     "mypy>=1.20.1",
     "pytest>=9.0.3",
     "ruff>=0.15.11",
-    "ty>=0.0.31",
 ]
 
 [tool.pytest.ini_options]
@@ -41,3 +40,10 @@ markers = [
     "unit: fast isolated tests for local logic",
     "integration: tests that require external services or real credentials",
 ]
+
+[tool.mypy]
+python_version = "3.14"
+plugins = ["pydantic.mypy"]
+
+[tool.pydantic-mypy]
+init_typed = true

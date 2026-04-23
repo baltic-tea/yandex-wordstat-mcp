@@ -4,6 +4,8 @@ import importlib
 import logging
 import runpy
 import sys
+import tomllib
+from pathlib import Path
 
 import pytest
 
@@ -15,7 +17,15 @@ def test_package_exports_mcp() -> None:
     assert package_all == ["mcp"]
 
 
-def test_main_configures_logging_validates_settings_and_runs_mcp(
+def test_console_script_targets_server_entrypoint() -> None:
+    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+
+    assert pyproject["project"]["scripts"]["wordstat-mcp"] == (
+        "wordstat_mcp.__main__:start_server"
+    )
+
+
+def test_start_server_configures_logging_validates_settings_and_runs_mcp(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     state = {"logging": None, "settings_calls": 0, "run_calls": 0}
@@ -39,7 +49,7 @@ def test_main_configures_logging_validates_settings_and_runs_mcp(
         lambda: state.__setitem__("run_calls", state["run_calls"] + 1),
     )
 
-    module.main()
+    module.start_server()
 
     assert state["logging"] == {
         "level": logging.INFO,
@@ -49,7 +59,7 @@ def test_main_configures_logging_validates_settings_and_runs_mcp(
     assert state["run_calls"] == 1
 
 
-def test_main_raises_on_invalid_settings_before_running_mcp(
+def test_start_server_raises_on_invalid_settings_before_running_mcp(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     module = importlib.import_module("wordstat_mcp.__main__")
@@ -66,7 +76,7 @@ def test_main_raises_on_invalid_settings_before_running_mcp(
     )
 
     with pytest.raises(WordstatConfigError, match="required"):
-        module.main()
+        module.start_server()
 
 
 def test_module_execution_runs_main(monkeypatch: pytest.MonkeyPatch) -> None:

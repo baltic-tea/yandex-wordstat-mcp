@@ -24,4 +24,3 @@ docs/
 examples/
 htmlcov/
 tests/
-uv.lock
